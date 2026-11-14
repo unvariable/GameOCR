@@ -1,0 +1,80 @@
+# GameOCR varsayılan ayarları.
+# İlk çalıştırmada ~/.config/gameocr/config.toml konumuna kopyalanır.
+# Çoğu ayar tepsi menüsündeki "Ayarlar…" penceresinden de değiştirilebilir.
+
+[general]
+source_lang = "EN"        # Oyunun dili (OCR modeli buna göre seçilir)
+target_lang = "TR"        # Çeviri dili
+ui_language = "tr"        # Arayüz dili: "tr" | "en"
+log_level = "INFO"
+translation_engine = "auto_fallback"  # "auto_fallback" | "deepl" | "local"
+
+[capture]
+backend = "auto"          # auto | portal (Wayland) | xcomposite (X11) | mss (X11 yedek) | win32
+fps = 8.0                 # saniyedeki yakalama sayısı
+roi = [0.0, 0.0, 0.0, 0.0]  # oransal x, y, w, h — "ROI Seç" ile ayarlanır
+portal_restore_token = ""
+x11_window_id = 0
+win32_hwnd = 0
+mss_monitor = 1
+
+[preprocess]
+mode = "none"             # none (derin öğrenme modelleri için doğal anti-aliased görüntü) | otsu | adaptive
+scale = 2.0               # küçük yazılar için büyütme
+denoise = false           # harf kenarlarını bulandırmamak için varsayılan kapalı
+change_threshold = 0.4    # % — görüntü bu kadar değişmediyse OCR çalışmaz
+
+[ocr]
+engine = "auto"           # auto | rapidocr (ONNX-CPU Lite) | paddle (NVIDIA/CUDA)
+use_gpu = true
+device = "auto"           # auto | gpu | cpu
+low_end_mode = false      # Düşük donanımlı (low-end) bilgisayarlar için hafif mod
+min_confidence = 0.6
+det_limit_side_len = 960
+det_limit_type = "max"    # max | min — "max" altyazı ve geniş ROI'lerde bellek patlamasını engeller
+cpu_threads = 4           # ONNX Runtime CPU iş parçacığı sınırı
+enable_tensorrt = false   # NVIDIA sürümünde opsiyonel TensorRT hızlandırması
+installed_ocr_packs = ["EN", "LATIN"]
+
+[filter]
+similarity_threshold = 90 # 0-100; bu benzerlikteki metinler "aynı altyazı" sayılır
+min_chars = 2
+stable_frames = 1         # kare değişiminde anında çevir
+clear_after_empty_frames = 6
+settle_time = 0.60        # sn — daktilo metninin durulmasını bekleme süresi
+
+[cache]
+max_entries = 5000        # kalıcı çeviri önbelleği kayıt sınırı
+
+[deepl]
+auth_key = ""             # boş bırakılırsa DEEPL_AUTH_KEY ortam değişkeni kullanılır
+formality = "default"
+free_char_limit = 500000
+
+[local_translator]
+device = "auto"           # auto | cpu | cuda
+compute_type = "int8"     # int8 | float16 | default
+installed_packs = ["EN-TR"]
+
+[overlay]
+opacity = 0.72            # 0.0 (tam şeffaf) ile 1.0 (tam opak) arası
+blur = true
+blur_strength = 5         # 1..15 buzlu cam seviyesi
+text_shadow = true        # Yazı arkasına okunabilirlik gölgesi
+font_family = "Inter"
+font_min = 12
+font_max = 30
+text_color = "#F5F5F7"
+panel_color = "#0F0F14"
+corner_radius = 14
+exact_alignment = true    # Tam Hizalama (koordinat, boyut ve renk)
+match_font_size = true    # Orijinal yazı tipi boyutunu eşle
+match_text_color = true   # Orijinal metin rengini örnekle
+
+[hotkeys]
+enabled = true
+pause = "ctrl+alt+p"             # Duraklat / Devam Et
+select_roi = "ctrl+alt+s"        # Altyazı Alanı Seç
+toggle_overlay = "ctrl+alt+o"    # Overlay Göster / Gizle
+history = "ctrl+alt+h"           # Çeviri Geçmişi
+

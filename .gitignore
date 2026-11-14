@@ -1,0 +1,44 @@
+# Python ve Sanal Ortamlar
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Gizli Anahtarlar ve Yerel Yapılandırmalar (ASLA COMMIT EDİLMEZ)
+.env
+.env.*
+!.env.example
+config.toml
+
+# Derleme Çıktıları, İkili Dosyalar ve Büyük Model Ağırlıkları
+# (Büyük ikili paketler git deposuna değil, GitHub Releases'a yüklenir
+# veya ./build.sh çalıştırıldığında resmi kaynaklardan otomatik indirilir)
+build/
+dist/
+models/
+*.AppImage
+*.AppImage.*
+*.squashfs
+*.zip
+*.exe
+*.tar.gz
+SHA256SUMS.txt
+
+# Geçici ve Sistem Dosyaları
+*.tmp
+*.log
+*.swp
+*~
+.DS_Store
+Thumbs.db
+=
+
