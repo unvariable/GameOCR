@@ -38,8 +38,15 @@ class RoiSelectorWindow(QWidget):
         self._current_pos: QPoint | None = None
         self._is_selecting = False
 
+        import sys as _sys
+
         # Şeffaf tam ekran pencere ayarları (Görev çubuğunda sekme açmaması için Tool bayrağı)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        if _sys.platform == "win32":
+            # Windows'ta WA_TranslucentBackground, SetWindowDisplayAffinity'yi engeller;
+            # setWindowOpacity ile şeffaflık sağlanarak self-capture önlenir.
+            self.setWindowOpacity(0.42)
+        else:
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -57,7 +64,11 @@ class RoiSelectorWindow(QWidget):
         super().showEvent(event)
         import sys as _sys
 
-        if _sys.platform != "win32":
+        if _sys.platform == "win32":
+            from ..capture.win32_backend import set_win32_exclude_from_capture
+
+            set_win32_exclude_from_capture(int(self.winId()), exclude=True)
+        else:
             from .overlay import set_x11_always_on_top
 
             set_x11_always_on_top(int(self.winId()))

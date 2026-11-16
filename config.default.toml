@@ -77,4 +77,5 @@ pause = "ctrl+alt+p"             # Duraklat / Devam Et
 select_roi = "ctrl+alt+s"        # Altyazı Alanı Seç
 toggle_overlay = "ctrl+alt+o"    # Overlay Göster / Gizle
 history = "ctrl+alt+h"           # Çeviri Geçmişi
+show_panel = "ctrl+alt+g"        # Kontrol Merkezini Göster / Öne Getir
 

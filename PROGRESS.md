@@ -31,6 +31,12 @@
 | **Aşama 17** | Windows & RapidOCR Metin Algılama Kalitesi (Kelime Birleşmesi, Ön İşleme, İngilizce/Latin ONNX Modeli ve Self-Capture Geri Besleme Döngüsü) İyileştirmesi | `[x] Tamamlandı` | **74/74 test geçti** (`pytest -v`, 7.11s) |
 | **Aşama 18** | Farklı Dillerde OCR Paketi İndirme Yöneticisi (`OcrModelManager` + Ayarlar Arayüzü + Dinamik ONNX/Paddle Model Yükleme) | `[x] Tamamlandı` | **78/78 test geçti** (`pytest -v`, 7.84s) |
 | **Aşama 19** | GitHub Tek Komut Yayınlama Betiği (`publish_github.sh`), Gizlilik/Telif Temizliği (`LICENSE`, `THIRD_PARTY_NOTICES.md`, `.gitignore`), `build.sh` Otomatik Kütüphane İndirici ve Dokümantasyon Güncellemesi | `[x] Tamamlandı` | **79/79 test geçti** (`pytest -v`, 7.66s) |
+| **Aşama 20** | Linux Mint / Temiz Sistem AppImage `xcb` (`libxcb-cursor.so.0` + `cv2/qt` Çakışması) Düzeltmesi ve VM Üzerinde Sıfır Kurulum Doğrulaması | `[x] Tamamlandı` | `79/79` birim testi (`6.91s`) + Linux Mint VM (`192.168.221.129`) üzerinde sıfır kurulumla `DISPLAY=:0` canlı doğrulama |
+| **Aşama 21** | Evrensel Arayüz Erişimi (`ControlWindow` + Tek Örnek IPC + `show_panel` Kısayolu) ve Popüler Masaüstleri (Cinnamon/GNOME/XFCE/KDE) İçin Sistem Tepsisi İkon/Tema Düzeltmesi | `[x] Tamamlandı` | **82/82** birim testi (`8.28s`) + Cinnamon VM'de `ControlWindow`, `IconName="gameocr"` ve Tek Örnek IPC (`SECOND_EXIT:0`) doğrulandı |
+| **Aşama 22** | Windows Sürümü OCR Doğruluğu, Self-Capture / Tutarlılık ve Performans Sorunlarının Analizi ve Düzeltilmesi | `[x] Tamamlandı` | **83/83** birim testi (`6.49s`) + Windows VM'de `diff=0.000` (sıfır self-capture), `ocr_ms=88.4 ms` ve `GameOCR-Universal-x64.exe` derlemesi doğrulandı |
+| **Aşama 23** | Sürüm Analizi, Gizlilik Kontrolü, Linux/Windows Derleme ve GitHub Release Yayınlama | `[x] Tamamlandı` | `v0.2.0` (`pyproject.toml`, `gameocr/__init__.py`, `CHANGELOG.md`), `./publish_github.sh --check-only` temiz, `GameOCR-Universal-x86_64.AppImage` (`824M`) & `GameOCR-Universal-x64.exe` (`545M`) doğrulandı |
+| **Aşama 22** | Windows Sürümü OCR Doğruluğu, Self-Capture / Tutarlılık ve Performans Sorunlarının Analizi ve Düzeltilmesi | `[x] Tamamlandı` | **83/83** birim testi (`6.49s`) + Windows VM'de `diff=0.000` (sıfır self-capture), `ocr_ms=88.4 ms` ve `GameOCR-Universal-x64.exe` derlemesi doğrulandı |
+| **Aşama 23** | Sürüm Analizi, Gizlilik Kontrolü, Linux/Windows Derleme ve GitHub Release Yayınlama | `[x] Tamamlandı` | `v0.2.0` (`pyproject.toml`, `gameocr/__init__.py`, `CHANGELOG.md`), `./publish_github.sh --check-only` temiz, `GameOCR-Universal-x86_64.AppImage` (`824M`) & `GameOCR-Universal-x64.exe` (`545M`) doğrulandı |
 
 ---
 
@@ -148,11 +154,47 @@
 50. **`[Tamamlandı]`** **Aşama 19.5 (Adım 4.1 — `AGENTS.md` ve `README.md` Güncellemesi):** `AGENTS.md` ve `README.md` dosyaları Dual-Engine OCR, çok dilli OCR paket indirici (`OcrModelManager`), `build.sh` otomatik kütüphane indirme ve `publish_github.sh` tek komutla yayınlama/Releases rehberiyle güncellendi.
 51. **`[Tamamlandı]`** **Aşama 19.6 (Adım 4.2 — `docs/tr/*` ve `docs/en/*` Teknik Dokümantasyon Güncellemesi):** `docs/tr/local_translation.md`, `docs/tr/building.md`, `docs/en/local_translation.md` ve `docs/en/building.md` dosyaları çok dilli OCR paket yöneticisi, `build.sh` otomatik önyükleyici ve `publish_github.sh` kullanımıyla güncellendi.
 52. **`[Tamamlandı]`** **Aşama 19.7 (`tests/test_ocr_models.py` Gizlilik ve `build.sh` Bootstrap Birim Testi):** `test_publish_github_check_only_and_build_bootstrap_present` birim testi eklendi.
-53. **`[Tamamlandı]`** **Aşama 19.8 (`./publish_github.sh --check-only` ve `uv run pytest -v` Final Doğrulaması):** Gizlilik/telif/dosya boyutu taraması sıfır uyarıyla geçti ve tüm **79/79** birim testi (`7.66s`) başarıyla tamamlandı.
+53. **`[Tamamlandı]`** `./publish_github.sh --check-only` ve `uv run pytest -v` Final Doğrulaması: Gizlilik/telif/dosya boyutu taraması sıfır uyarıyla geçti ve tüm **79/79** birim testi (`7.66s`) başarıyla tamamlandı.
+54. **`[Tamamlandı]`** **Aşama 20.1 (Linux Mint VM Teşhisi):** `taner@192.168.221.129` üzerinde SSH ile sistem kütüphaneleri doğrulandı (`libxcb-cursor.so.0` eksik, diğer `xcb` kütüphaneleri mevcut).
+55. **`[Tamamlandı]`** **Aşama 20.2 (`build.sh` & `gameocr/__main__.py`):** `build.sh` içine `cv2/qt` temizliği, `libxcb-cursor.so.0` ve yardımcı XCB/XKB kütüphanelerinin `$appdir/usr/lib` altına fallback olarak gömülmesi, `AppRun` içinde `LD_LIBRARY_PATH` sonuna `:$HERE/usr/lib` eklenmesi ve `QT_QPA_PLATFORM_PLUGIN_PATH` koruması eklendi; `gameocr/__main__.py` içinde `QApplication` öncesi PyQt6 eklenti yolu güvenceye alındı.
+56. **`[Tamamlandı]`** **Aşama 20.3 (AppImage Yeniden Derleme, Linux Mint VM Doğrulaması ve `pytest -v`):**
+    - `build.sh` içindeki `ldconfig -p | awk` SIGPIPE (exit 141) sorunu giderildi ve `GameOCR-Universal-x86_64.AppImage` (`824M`) sıfırdan üretildi.
+    - `taner@192.168.221.129:~/Downloads/` dizinine kopyalanıp **hiçbir ek paket kurulmadan** `DISPLAY=:0 timeout 8s ~/Downloads/GameOCR-Universal-x86_64.AppImage` ile çalıştırıldı; Qt `xcb` eklentisi, `xcomposite` yakalama, `RapidOCR` (`en_rec.onnx`), 4 iş parçacığı ve ROI seçici hatasız başlatıldı.
+    - Yerel `uv run pytest -v` ile **79/79** test (`6.91s`) başarıyla geçti.
+57. **`[Tamamlandı]`** **Aşama 21.1 (Cinnamon Tepsi Teşhisi):** Cinnamon VM'de `xwininfo` / `XCompositeBackend` / `OverlayWindow` doğrulandı; `StatusNotifierItem` üzerinde `IconName=""` olduğu için Cinnamon `xapp-sn-watcher` tarafından görünmediği tespit edildi.
+58. **`[Tamamlandı]`** **Aşama 21.2 (Evrensel Kontrol Merkezi, Tek Örnek IPC, `show_panel` Kısayolu ve Tepsi İkon/Tema Düzeltmesi):**
+    - `gameocr/ui/control_window.py` (`ControlWindow`): Tüm masaüstlerinde görev çubuğundan doğrudan erişilebilen kompakt Kontrol Merkezi penceresi eklendi.
+    - `gameocr/ui/tray.py`: `get_tray_icon()` ile `~/.local/share/icons/hicolor/64x64/apps/gameocr.png` yazılıp `QIcon.fromTheme("gameocr")` yüklendi; `tray.activated` (sol tık) ve `tray.show_panel` menü öğesi eklendi.
+    - `gameocr/__main__.py`: GTK tabanlı masaüstlerinde (`Cinnamon`, `GNOME`, `XFCE`, `MATE`, `Budgie`, `Unity`, `Pantheon`, `LXDE`) otomatik `QT_QPA_PLATFORMTHEME=gtk3` seçimi, `QLocalServer` / `QLocalSocket` Tek Örnek IPC (`os._exit(0)` ile temiz çıkış) ve `ControlWindow` başlangıç/kısayol entegrasyonu eklendi.
+    - `gameocr/config.py`, `config.default.toml`, `gameocr/i18n.py`, `gameocr/ui/settings_dialog.py`: `HotkeysConfig.show_panel = "ctrl+alt+g"` kısayolu ve çift dilli arayüz anahtarları eklendi.
+59. **`[Tamamlandı]`** **Aşama 21.3 (`tests/test_control_window.py`, `uv run pytest -v`, AppImage & Cinnamon VM Doğrulaması):**
+    - **82/82** birim testi (`8.28s`) başarıyla geçti.
+    - `GameOCR-Universal-x86_64.AppImage` (`824M`) yeniden üretilip Linux Mint Cinnamon VM'de test edildi: `GameOCR — Kontrol Merkezi` penceresi açıldı, D-Bus `StatusNotifierItem.IconName` `"gameocr"` olarak doğrulandı ve ikinci örnek `SECOND_EXIT:0` ile mevcut pencereyi öne getirdi.
+60. **`[Tamamlandı]`** **Aşama 21.4 (`libxkbcommon-x11.so.0` ABI Çakışması / X11 KeyPress SIGSEGV Düzeltmesi):**
+    - Fedora 45 (`libxkbcommon 1.13.1`) üzerinden gelen `libxkbcommon-x11.so.0` ile Mint 24.04 (`libxkbcommon 1.6.0`) üzerindeki `libxkbcommon.so.0` birleşince ilk X11 klavye olayında `xkb_state_key_get_layout` içinde `SIGSEGV` oluştuğu tespit edildi.
+    - `build.sh` içindeki `xcb_fallback_libs` listesinden `libxkbcommon-x11.so.0` çıkarıldı; evrensel (`--de other --display hybrid`) `GameOCR-Universal-x86_64.AppImage` (`824M`) yeniden derlenip VM'de X11 `KeyPress` sonrası ayakta kaldığı (`GAMEOCR_ALIVE_AFTER_KEYPRESS`) doğrulandı.
+61. **`[Tamamlandı]`** **Aşama 21.5 (`LC_NUMERIC="C"` Sabitlemesi + `ControlWindow` Çarpı ile Kapatma Davranışı):**
+    - `QApplication(sys.argv)` çağrısının `tr_TR.UTF-8` gibi yerel ayarlarda `LC_NUMERIC`'i değiştirmesi nedeniyle `RapidOCR`'ın `(None, None)` döndürdüğü tespit edildi. `gameocr/__main__.py` içinde `QApplication` sonrası `locale.setlocale(locale.LC_NUMERIC, "C")` sabitlendi.
+    - `ControlWindow` `hide_on_close=False` yapılarak çarpı (`×`) tuşunun doğrudan uygulamayı kapatması (`on_quit`), küçültme butonunun ise `showMinimized()` ile görev çubuğuna küçültmesi sağlandı (`gameocr/__main__.py`, `gameocr/ui/control_window.py`, `gameocr/i18n.py`, `tests/test_control_window.py`).
+    - `uv run pytest -v` ile **82/82** test (`9.06s`) geçti; `GameOCR-Universal-x86_64.AppImage` (`824M`) yeniden üretilip Linux Mint VM'de `LANG=tr_TR.UTF-8` altında canlı OCR (`güven=0.99`) ve çeviri doğrulandı.
+62. **`[Tamamlandı]`** **`CHANGELOG.md` Oluşturulması:** Bugün (Aşama 20–21) yapılan tüm değişiklikler, kök neden analizleri, mimari kararlar, test sonuçları ve dosya listesi sonraki ajanların GitHub Release hazırlığında referans alması için `CHANGELOG.md` dosyasına detaylı olarak işlendi.
+63. **`[Tamamlandı]`** **Aşama 22 (Windows Sürümü Self-Capture & Performans Kök Neden Düzeltmesi):**
+    - Windows 10 VM (`192.168.221.128`) üzerinde yapılan canlı testlerde `WA_TranslucentBackground=True` (`UpdateLayeredWindow`) kullanan pencerelerde DWM'in `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` çağrısını `ok=0, err=8` ile reddettiği ve `mss` (`BitBlt`) ile kendi overlay'inin/kontrol penceresinin tekrar yakalanıp çevrildiği (geri besleme döngüsü) kanıtlandı.
+    - `gameocr/ui/overlay.py`: Windows'ta `WA_TranslucentBackground` kaldırılarak `setMask(QRegion)` + `setWindowOpacity()` ve DPI (`devicePixelRatio()`) uyumu eklendi; `SetWindowDisplayAffinity` `ok=1` ile çalışır hale getirildi.
+    - `gameocr/ui/control_window.py` & `gameocr/ui/roi_selector.py`: Windows'ta `showEvent` içinde `set_win32_exclude_from_capture(..., True)` ve `RoiSelectorWindow` için `setWindowOpacity(0.42)` uygulanarak Kontrol Merkezi ve ROI seçicinin de yakalanması engellendi.
+    - `gameocr/preprocess.py`: `upscale()` içindeki gereksiz büyütme sınırı (`2000x1080` -> `1280x480` ve `h >= 240 and w >= 400` için atlama) düzeltilerek `719x385` boyutundaki ROI'de `RapidOCR` CPU çıkarım süresi `836-1600 ms` seviyesinden **`88.4 ms`** seviyesine indirildi.
+    - `tests/test_logging_and_win32.py`: `test_win32_overlay_mask_and_large_roi_upscale_skip` eklendi; `uv run pytest -v` ile **83/83** test (`6.49s`) geçti.
+    - Windows VM'de canlı doğrulama (`diff=0.000`, `ocr_ms=88.4`, `ocr_res=('There are no beautiful surfaces without a terrible depth.', 0.983)`) tamamlandı ve güncel `GameOCR-Universal-x64.exe` (`571,458,995` bayt) Masaüstü'ne derlendi.
+
+64. **`[Tamamlandı]`** **Aşama 23 (`v0.2.0` Sürüm Hazırlığı ve GitHub Release):**
+    - `pyproject.toml`, `gameocr/__init__.py` ve `CHANGELOG.md` dosyaları `0.2.0` sürümüne yükseltildi ve Aşama 20–22 değişiklikleri `CHANGELOG.md` içine işlendi.
+    - `./publish_github.sh --check-only` ile gizlilik, kişisel veri, API anahtarı ve büyük dosya taraması sıfır uyarıyla geçildi.
+    - Güncel `GameOCR-Universal-x86_64.AppImage` (`824M`) derlenip `--help` ile doğrulandı; Windows VM Masaüstü'nden `dist/GameOCR-Universal-x64.exe` (`545M`, PE32+ x86-64 GUI) alındı.
+    - Tüm temiz değişiklikler commit'lenip `v0.2.0` etiketiyle `origin/main` üzerine push'lanarak GitHub Release oluşturuldu.
 
 ---
 
 ## 4. Aktif Bağlam (Sıradaki Adım — Devir-Teslim Rehberi)
 
-- **Anlık Durum:** Aşama 19 tamamlandı. Proje dizini kişisel veri, API anahtarı ve telif/boyut sorunlarından tamamen arındırıldı; `build.sh` eksik kütüphaneleri resmi kaynaklardan otomatik indirecek şekilde güncellendi; `publish_github.sh` ile tek komutla GitHub'da yayınlanmaya hazır hale getirildi. Tüm **79/79** birim testi yeşil durumdadır.
+- **Anlık Durum:** Aşama 23 tamamlandı. `v0.2.0` sürümü kaynak kodu ve derlenmiş Linux (`GameOCR-Universal-x86_64.AppImage`) + Windows (`GameOCR-Universal-x64.exe`) paketleriyle GitHub Releases üzerinde yayınlanmıştır.
 - **Bir Sonraki Ajan / Sıradaki Adım:** Tüm aşamalar tamamlanmıştır; kullanıcıdan gelecek yeni geri bildirim veya ek özellik talepleri beklenmektedir.

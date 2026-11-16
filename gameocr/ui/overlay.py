@@ -33,9 +33,10 @@ from PyQt6.QtGui import (
     QPainter,
     QPainterPath,
     QPen,
+    QRegion,
     QTextDocument,
 )
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QApplication, QWidget
 
 from ..config import OverlayConfig
 from ..logging_utils import StageError, log_stage_exception, timed_stage
@@ -74,7 +75,9 @@ def set_win32_topmost_clickthrough(hwnd: int) -> bool:
         # SetWindowLongW çağrısı sonrası DWM yakalama gizleme bayrağını (WDA_EXCLUDEFROMCAPTURE = 0x11)
         # doğrudan pencerenin sahibi olan Qt ana iş parçacığında yenile (self-capture önleme):
         WDA_EXCLUDEFROMCAPTURE = 0x00000011
-        user32.user32.SetWindowDisplayAffinity(int(hwnd), WDA_EXCLUDEFROMCAPTURE)
+        ok = bool(user32.user32.SetWindowDisplayAffinity(int(hwnd), WDA_EXCLUDEFROMCAPTURE))
+        if not ok:
+            log.warning("Win32 SetWindowDisplayAffinity başarısız (hwnd=0x%x)", hwnd)
         return True
     except Exception as exc:
         log.debug("Win32 topmost/clickthrough uygulanamadı: %s", exc)
@@ -168,6 +171,7 @@ class OverlayWindow(QWidget):
         self._active_geometry: tuple[int, int, int, int] = (0, 0, 0, 0)
         self._blur_active: bool = False
         self._last_blur_geo: tuple[int, int] = (0, 0)
+        self._last_win32_mask_rect: tuple[int, int, int, int] | None = None
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -175,7 +179,11 @@ class OverlayWindow(QWidget):
             | Qt.WindowType.ToolTip
             | Qt.WindowType.WindowTransparentForInput
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        # Windows'ta WA_TranslucentBackground (UpdateLayeredWindow) kullanıldığında DWM
+        # SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) çağrısını reddeder (ok=0, err=8).
+        # Bu nedenle Windows üzerinde setMask(QRegion) + setWindowOpacity() ile saydamlık sağlanır.
+        if sys.platform != "win32":
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
         ensure_kwin_rule()
@@ -219,7 +227,32 @@ class OverlayWindow(QWidget):
     @panelOpacity.setter
     def panelOpacity(self, value: float) -> None:
         self._opacity = max(0.0, min(1.0, float(value)))
+        if sys.platform == "win32":
+            self._apply_win32_window_opacity()
         self.update()
+
+    def _apply_win32_window_opacity(self, exact_mode: bool = False) -> None:
+        base_alpha = max(0.0, min(1.0, float(self.cfg.opacity)))
+        if exact_mode:
+            target = max(base_alpha, 0.96) * self._opacity
+        else:
+            target = max(0.12, base_alpha) * self._opacity if base_alpha > 0.01 else self._opacity
+        self.setWindowOpacity(max(0.0, min(1.0, target)))
+
+    def _sync_win32_mask(self, panel_rect: QRectF) -> None:
+        """Windows'ta yalnızca çizilen panel dikdörtgenini görünür kılar (dışı tamamen şeffaftır)."""
+        if sys.platform != "win32":
+            return
+        import math
+
+        rx = max(0, int(math.floor(panel_rect.x())))
+        ry = max(0, int(math.floor(panel_rect.y())))
+        rw = max(1, int(math.ceil(panel_rect.width())))
+        rh = max(1, int(math.ceil(panel_rect.height())))
+        key = (rx, ry, rw, rh)
+        if self._last_win32_mask_rect != key:
+            self._last_win32_mask_rect = key
+            self.setMask(QRegion(QRect(rx, ry, rw, rh)))
 
     def _on_anim_finished(self) -> None:
         if self._opacity <= 0.01:
@@ -273,9 +306,18 @@ class OverlayWindow(QWidget):
     def set_roi_geometry(self, x: int, y: int, w: int, h: int) -> None:
         if w <= 0 or h <= 0:
             return
+        if sys.platform == "win32":
+            screen = QApplication.primaryScreen()
+            dpr = float(screen.devicePixelRatio()) if screen is not None else 1.0
+            if dpr > 1.01:
+                x = int(round(x / dpr))
+                y = int(round(y / dpr))
+                w = max(1, int(round(w / dpr)))
+                h = max(1, int(round(h / dpr)))
         if self._active_geometry == (x, y, w, h):
             return
         self._active_geometry = (x, y, w, h)
+        self._last_win32_mask_rect = None
         self.setGeometry(x, y, w, h)
         self._apply_blur()
         set_x11_always_on_top(int(self.winId()))
@@ -578,12 +620,15 @@ class OverlayWindow(QWidget):
         panel_rect, text_rect, font, text_color, alignment, mode = self.compute_render_layout(
             w, h, display_text
         )
+        if sys.platform == "win32":
+            self._sync_win32_mask(panel_rect)
+            self._apply_win32_window_opacity(exact_mode=(mode == "exact"))
         radius = float(self.cfg.corner_radius)
 
         # 1. Arka plan paneli
         # Opaklık 0.0 ise panel tamamen şeffaftır (yalnızca yazı ve gölgesi görünür)
         base_alpha = max(0.0, min(1.0, float(self.cfg.opacity)))
-        alpha = int(base_alpha * self._opacity * 255)
+        alpha = 255 if sys.platform == "win32" else int(base_alpha * self._opacity * 255)
         bg_luma = 15.0
 
         if alpha > 0:
@@ -595,7 +640,7 @@ class OverlayWindow(QWidget):
                 if not c_bg.isValid():
                     c_bg = QColor(self.cfg.panel_color)
                 bg_luma = self._color_luma(c_bg)
-                exact_alpha = int(max(base_alpha, 0.96) * self._opacity * 255)
+                exact_alpha = 255 if sys.platform == "win32" else int(max(base_alpha, 0.96) * self._opacity * 255)
                 c_bg.setAlpha(exact_alpha)
                 painter.setBrush(c_bg)
                 painter.setPen(Qt.PenStyle.NoPen)

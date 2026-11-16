@@ -883,6 +883,9 @@ class SettingsDialog(QDialog):
         w_hist, self.hotkey_history_btn = _make_hotkey_row(self.cfg.hotkeys.history)
         layout.addRow(t("settings.hotkey_history"), w_hist)
 
+        w_panel, self.hotkey_show_panel_btn = _make_hotkey_row(self.cfg.hotkeys.show_panel)
+        layout.addRow(t("settings.hotkey_show_panel"), w_panel)
+
         info_lbl = QLabel(t("settings.hotkeys_info"))
         info_lbl.setStyleSheet("color: #8888aa; font-size: 11px;")
         layout.addRow("", info_lbl)
@@ -946,6 +949,7 @@ class SettingsDialog(QDialog):
         self.cfg.hotkeys.select_roi = self.hotkey_roi_btn.current_shortcut()
         self.cfg.hotkeys.toggle_overlay = self.hotkey_overlay_btn.current_shortcut()
         self.cfg.hotkeys.history = self.hotkey_history_btn.current_shortcut()
+        self.cfg.hotkeys.show_panel = self.hotkey_show_panel_btn.current_shortcut()
 
         save_config(self.cfg)
         log.info("Ayarlar güncellendi ve kaydedildi")

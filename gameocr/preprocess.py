@@ -27,9 +27,11 @@ def upscale(gray: np.ndarray, factor: float) -> np.ndarray:
     if factor <= 1.0:
         return gray
     h, w = gray.shape[:2]
-    # Devasa/geniş ekranlarda (örn. w > 1920) aşırı büyütmeyi sınırla, ancak çok satırlı
-    # kutuların (yükseklik <= 540px) 2x netleştirilmesine izin ver:
-    max_w, max_h = 2000, 1080
+    # Zaten yeterince büyük çok satırlı ROI'lerde (h >= 240 ve w >= 400) 2x büyütme
+    # RapidOCR/PP-OCRv4 CPU çıkarımını 10 kat yavaşlatır (77ms -> 836ms+) ve katkı sağlamaz.
+    if h >= 240 and w >= 400:
+        return gray
+    max_w, max_h = 1280, 480
     if w * factor > max_w or h * factor > max_h:
         capped = min(factor, max_w / max(1, w), max_h / max(1, h))
         if capped <= 1.05:

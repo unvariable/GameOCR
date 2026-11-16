@@ -862,6 +862,38 @@ with open('$edition_launcher', 'r+b') as f:
                 done
             fi
 
+            # cv2 (opencv-python) içindeki Qt eklentileri PyQt6 ile çakıştığı için temizle
+            rm -rf "$appdir/usr/site-packages/cv2/qt" 2>/dev/null || true
+
+            # Temiz Linux dağıtımlarında (örn. Linux Mint / Ubuntu) eksik olabilen Qt xcb
+            # sistem bağımlılıklarını (özellikle libxcb-cursor.so.0) fallback olarak göm.
+            # NOT: libxkbcommon-x11.so.0, hosttaki libxkbcommon.so.0 ile birebir aynı sürümden
+            # gelmek zorunda olduğu için (aksi halde xkb_state_key_get_layout SIGSEGV verir) gömülmez.
+            mkdir -p "$appdir/usr/lib"
+            local xcb_fallback_libs=(
+                "libxcb-cursor.so.0"
+                "libxcb-icccm.so.4"
+                "libxcb-image.so.0"
+                "libxcb-keysyms.so.1"
+                "libxcb-render-util.so.0"
+                "libxcb-util.so.1"
+            )
+            for xlib_name in "${xcb_fallback_libs[@]}"; do
+                local xlib_path=""
+                xlib_path="$(ldconfig -p 2>/dev/null | awk -v n="$xlib_name" '!found && $1 == n && $0 ~ /x86-64/ {print $NF; found=1}')"
+                if [[ -z "$xlib_path" ]]; then
+                    for d in /lib64 /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu; do
+                        if [[ -e "$d/$xlib_name" ]]; then
+                            xlib_path="$d/$xlib_name"
+                            break
+                        fi
+                    done
+                fi
+                if [[ -n "$xlib_path" && -e "$xlib_path" ]]; then
+                    cp -Lf "$xlib_path" "$appdir/usr/lib/$xlib_name"
+                fi
+            done
+
             cat > "$appdir/AppRun" <<APPRUN_EOF
 #!/usr/bin/env bash
 HERE="\$(dirname "\$(readlink -f "\${0}")")"
@@ -891,7 +923,7 @@ if [[ "${force_cpu_val}" == "1" ]]; then
     export GAMEOCR_FORCE_CPU=1
     export CUDA_VISIBLE_DEVICES=-1
     export OMP_NUM_THREADS=4
-    export LD_LIBRARY_PATH="\$HERE/usr/python/lib:\${LD_LIBRARY_PATH:-}"
+    export LD_LIBRARY_PATH="\$HERE/usr/python/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}:\$HERE/usr/lib"
 else
     export FLAGS_fraction_of_gpu_memory_to_use=0.35
     NVIDIA_LIBS=""
@@ -903,7 +935,12 @@ else
     if [[ -d "\$HERE/usr/site-packages/cusparselt/lib" ]]; then
         NVIDIA_LIBS="\${NVIDIA_LIBS:+\$NVIDIA_LIBS:}\$HERE/usr/site-packages/cusparselt/lib"
     fi
-    export LD_LIBRARY_PATH="\${NVIDIA_LIBS:+\$NVIDIA_LIBS:}\$HERE/usr/site-packages/paddle/libs:\$HERE/usr/python/lib:\${LD_LIBRARY_PATH:-}"
+    export LD_LIBRARY_PATH="\${NVIDIA_LIBS:+\$NVIDIA_LIBS:}\$HERE/usr/site-packages/paddle/libs:\$HERE/usr/python/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}:\$HERE/usr/lib"
+fi
+
+if [[ -d "\$HERE/usr/site-packages/PyQt6/Qt6/plugins/platforms" ]]; then
+    export QT_PLUGIN_PATH="\$HERE/usr/site-packages/PyQt6/Qt6/plugins"
+    export QT_QPA_PLATFORM_PLUGIN_PATH="\$HERE/usr/site-packages/PyQt6/Qt6/plugins/platforms"
 fi
 
 export PYTHONHOME="\$HERE/usr/python"

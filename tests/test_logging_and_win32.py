@@ -282,6 +282,41 @@ def test_windows_single_exe_ascii_scripts_and_meipass_models(monkeypatch: pytest
     assert found[0] == model_sub
 
 
+def test_win32_overlay_mask_and_large_roi_upscale_skip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Aşama 22: Windows'ta OverlayWindow WA_TranslucentBackground yerine setMask kullanmalı
+    (SetWindowDisplayAffinity uyumu) ve upscale() büyük ROI'leri 2x büyüterek OCR'ı yavaşlatmamalıdır.
+    """
+    import os
+    import numpy as np
+    from PyQt6.QtCore import QRectF, Qt
+    from PyQt6.QtWidgets import QApplication
+    from gameocr.config import OverlayConfig
+    from gameocr.preprocess import upscale
+    import gameocr.ui.overlay as overlay_mod
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _app = QApplication.instance() or QApplication([])
+
+    # 1) Büyük ROI (385x719) büyütülmemeli, küçük altyazı bandı (100x400) büyütülmeli
+    large_roi = np.zeros((385, 719), dtype=np.uint8)
+    assert upscale(large_roi, 2.0).shape == (385, 719)
+
+    small_roi = np.zeros((100, 400), dtype=np.uint8)
+    assert upscale(small_roi, 2.0).shape == (200, 800)
+
+    # 2) Windows simülasyonu: WA_TranslucentBackground kapalı + setMask aktif
+    monkeypatch.setattr(overlay_mod.sys, "platform", "win32")
+    monkeypatch.setattr(overlay_mod, "set_win32_topmost_clickthrough", lambda hwnd: True)
+    monkeypatch.setattr(overlay_mod, "ensure_kwin_rule", lambda: None)
+    ov = overlay_mod.OverlayWindow(OverlayConfig())
+    assert not ov.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    ov._sync_win32_mask(QRectF(10.0, 20.0, 200.0, 80.0))
+    assert ov._last_win32_mask_rect == (10, 20, 200, 80)
+    assert not ov.mask().isEmpty()
+    ov.close()
+
+
+
 
 
 

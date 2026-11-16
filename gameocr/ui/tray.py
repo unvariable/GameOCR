@@ -6,6 +6,8 @@ durum ipucu ve bildirim desteği sunar.
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 from typing import Callable
 
 from PyQt6.QtCore import Qt
@@ -41,6 +43,31 @@ def create_default_tray_icon() -> QIcon:
     return QIcon(pix)
 
 
+def get_tray_icon() -> QIcon:
+    """Tema ikonu (`gameocr`) yükler; yoksa kullanıcı ikon dizinine PNG yazıp fallback döner.
+
+    Cinnamon (`xapp-sn-watcher`) ve GNOME AppIndicator gibi StatusNotifierHost
+    bileşenleri `IconName` boş olduğunda ikonu göstermeyebildiği için tema ikonu
+    sağlamak tüm masaüstü ortamlarında görünürlüğü artırır.
+    """
+    fallback = create_default_tray_icon()
+    try:
+        data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+        icon_file = data_home / "icons" / "hicolor" / "64x64" / "apps" / "gameocr.png"
+        if not icon_file.exists():
+            icon_file.parent.mkdir(parents=True, exist_ok=True)
+            pix = fallback.pixmap(64, 64)
+            pix.save(str(icon_file), "PNG")
+        themed = QIcon.fromTheme("gameocr")
+        if not themed.isNull():
+            return themed
+        if icon_file.exists():
+            return QIcon(str(icon_file))
+    except Exception as exc:
+        log.debug("Tema ikonu hazırlanamadı, bellek içi ikon kullanılacak: %s", exc)
+    return fallback
+
+
 class TrayManager:
     def __init__(
         self,
@@ -52,6 +79,7 @@ class TrayManager:
         on_open_settings: Callable[[], None] | None = None,
         on_open_history: Callable[[], None] | None = None,
         on_toggle_overlay: Callable[[bool], None] | None = None,
+        on_show_control: Callable[[], None] | None = None,
         on_quit: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -63,10 +91,11 @@ class TrayManager:
         self.on_open_settings = on_open_settings
         self.on_open_history = on_open_history
         self.on_toggle_overlay = on_toggle_overlay
+        self.on_show_control = on_show_control
         self.on_quit = on_quit
 
         self.tray = QSystemTrayIcon(parent)
-        self.tray.setIcon(create_default_tray_icon())
+        self.tray.setIcon(get_tray_icon())
 
         self.backend_name = "auto"
         self.is_paused = False
@@ -74,6 +103,7 @@ class TrayManager:
 
         self._build_menu()
         self._update_tooltip()
+        self.tray.activated.connect(self._handle_activated)
         self.tray.show()
 
     def _build_menu(self) -> None:
@@ -83,6 +113,12 @@ class TrayManager:
         self.header_action = QAction(f"{t('app.name')} [{self.cfg.general.source_lang} → {self.cfg.general.target_lang}]", menu)
         self.header_action.setEnabled(False)
         menu.addAction(self.header_action)
+
+        # Kontrol Merkezi
+        show_panel_action = QAction(t("tray.show_panel"), menu)
+        if self.on_show_control:
+            show_panel_action.triggered.connect(self.on_show_control)
+        menu.addAction(show_panel_action)
         menu.addSeparator()
 
         # Başlat / Duraklat
@@ -131,6 +167,14 @@ class TrayManager:
         menu.addAction(quit_action)
 
         self.tray.setContextMenu(menu)
+
+    def _handle_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            if self.on_show_control:
+                self.on_show_control()
 
     def _handle_toggle_pause(self) -> None:
         self.is_paused = not self.is_paused

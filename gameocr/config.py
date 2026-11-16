@@ -174,6 +174,7 @@ class HotkeysConfig:
     select_roi: str = "ctrl+alt+s"        # Altyazı Alanı Seç
     toggle_overlay: str = "ctrl+alt+o"    # Overlay Göster / Gizle
     history: str = "ctrl+alt+h"           # Çeviri Geçmişi
+    show_panel: str = "ctrl+alt+g"        # Kontrol Merkezini Göster / Öne Getir
 
 
 @dataclass
