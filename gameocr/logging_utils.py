@@ -16,7 +16,30 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar
 
+from .security import harden_private_path, redact_secrets
+
 F = TypeVar("F", bound=Callable[..., Any])
+
+
+class _SecretRedactingFilter(logging.Filter):
+    """Log kayıtlarındaki API anahtarlarını ve kimlik bilgilerini maskeler."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = redact_secrets(record.msg)
+        if record.args:
+            if isinstance(record.args, tuple):
+                record.args = tuple(
+                    redact_secrets(a) if isinstance(a, str) else a for a in record.args
+                )
+            elif isinstance(record.args, dict):
+                record.args = {
+                    k: (redact_secrets(v) if isinstance(v, str) else v)
+                    for k, v in record.args.items()
+                }
+        if record.exc_text:
+            record.exc_text = redact_secrets(record.exc_text)
+        return True
 
 
 class StageError(RuntimeError):
@@ -122,17 +145,23 @@ def setup_logging(level_name: str = "INFO", log_dir: Path | None = None) -> None
         datefmt="%H:%M:%S",
     )
 
+    secret_filter = _SecretRedactingFilter()
+
     if not root.handlers:
         console = logging.StreamHandler()
         console.setFormatter(fmt)
+        console.addFilter(secret_filter)
         root.addHandler(console)
     else:
         for h in root.handlers:
             h.setFormatter(fmt)
+            if not any(isinstance(f, _SecretRedactingFilter) for f in h.filters):
+                h.addFilter(secret_filter)
 
     if log_dir is not None:
         try:
             log_dir.mkdir(parents=True, exist_ok=True)
+            harden_private_path(log_dir, is_dir=True)
             log_file = log_dir / "gameocr.log"
             has_file = any(isinstance(h, RotatingFileHandler) for h in root.handlers)
             if not has_file:
@@ -140,7 +169,9 @@ def setup_logging(level_name: str = "INFO", log_dir: Path | None = None) -> None
                     log_file, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
                 )
                 fh.setFormatter(fmt)
+                fh.addFilter(secret_filter)
                 root.addHandler(fh)
+            harden_private_path(log_file, is_dir=False)
         except OSError:
             pass
 

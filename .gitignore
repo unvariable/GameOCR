@@ -42,3 +42,8 @@ SHA256SUMS.txt
 Thumbs.db
 =
 
+# Yerel Ajan ve Yayınlama Betikleri (GitHub deposunda yayınlanmaz)
+PROGRESS.md
+AGENTS.md
+publish_github.sh
+

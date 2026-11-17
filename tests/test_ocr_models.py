@@ -141,25 +141,25 @@ def test_settings_dialog_ocr_packs_table_and_actions(qapp, tmp_path: Path, monke
 
 
 def test_publish_github_check_only_and_build_bootstrap_present() -> None:
-    """publish_github.sh gizlilik denetiminden geçmeli ve build.sh otomatik kütüphane indirici içermelidir."""
+    """build.sh otomatik kütüphane indirici içermeli ve mevcutsa publish_github.sh denetiminden geçmelidir."""
     import subprocess
 
     root = Path(__file__).resolve().parent.parent
     pub_script = root / "publish_github.sh"
     build_script = root / "build.sh"
-    assert pub_script.is_file()
     assert (root / "LICENSE").is_file()
     assert (root / "THIRD_PARTY_NOTICES.md").is_file()
     assert (root / ".gitignore").is_file()
     assert "ensure_build_prerequisites" in build_script.read_text(encoding="utf-8")
 
-    res = subprocess.run(
-        ["bash", str(pub_script), "--check-only"],
-        cwd=str(root),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert res.returncode == 0, f"publish_github.sh --check-only failed:\n{res.stdout}\n{res.stderr}"
+    if pub_script.is_file():
+        res = subprocess.run(
+            ["bash", str(pub_script), "--check-only"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert res.returncode == 0, f"publish_github.sh --check-only failed:\n{res.stdout}\n{res.stderr}"
 
 

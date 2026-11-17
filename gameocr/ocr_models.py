@@ -23,6 +23,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from .config import MODELS_DIR, PROJECT_ROOT
 from .logging_utils import StageError, log_stage_exception, timed_stage
+from .security import validate_https_url
 
 log = logging.getLogger(__name__)
 
@@ -418,34 +419,46 @@ class OcrModelManager:
             dest_dict.write_text("a\nb\nc\n", encoding="utf-8")
             return
 
+        validate_https_url(pack.dict_url)
+        validate_https_url(pack.model_url)
+
         # 1. Karakter sözlüğünü (.txt) indir
         tmp_dict = dest_dict.with_suffix(".txt.tmp")
-        req_dict = urllib.request.Request(pack.dict_url, headers={"User-Agent": "GameOCR/1.0"})
-        with urllib.request.urlopen(req_dict, timeout=45) as resp:
-            dict_bytes = resp.read()
-        tmp_dict.write_bytes(dict_bytes)
-        tmp_dict.replace(dest_dict)
+        try:
+            req_dict = urllib.request.Request(pack.dict_url, headers={"User-Agent": "GameOCR/1.0"})
+            with urllib.request.urlopen(req_dict, timeout=45) as resp:
+                dict_bytes = resp.read(16 * 1024 * 1024)
+            tmp_dict.write_bytes(dict_bytes)
+            tmp_dict.replace(dest_dict)
+        finally:
+            tmp_dict.unlink(missing_ok=True)
         if progress_cb:
             progress_cb(15)
 
         # 2. ONNX tanıma modelini (.onnx) indir
         tmp_model = dest_model.with_suffix(".onnx.tmp")
-        req_model = urllib.request.Request(pack.model_url, headers={"User-Agent": "GameOCR/1.0"})
-        with urllib.request.urlopen(req_model, timeout=120) as resp:
-            total_bytes = int(resp.headers.get("Content-Length") or int(pack.size_mb * 1024 * 1024))
-            read_bytes = 0
-            with tmp_model.open("wb") as fh:
-                while True:
-                    chunk = resp.read(131072)
-                    if not chunk:
-                        break
-                    fh.write(chunk)
-                    read_bytes += len(chunk)
-                    if total_bytes > 0 and progress_cb:
-                        pct = int(15 + (read_bytes / total_bytes) * 75)
-                        progress_cb(min(90, max(15, pct)))
+        try:
+            req_model = urllib.request.Request(pack.model_url, headers={"User-Agent": "GameOCR/1.0"})
+            with urllib.request.urlopen(req_model, timeout=120) as resp:
+                total_bytes = int(resp.headers.get("Content-Length") or int(pack.size_mb * 1024 * 1024))
+                read_bytes = 0
+                max_onnx_bytes = 256 * 1024 * 1024
+                with tmp_model.open("wb") as fh:
+                    while True:
+                        chunk = resp.read(131072)
+                        if not chunk:
+                            break
+                        read_bytes += len(chunk)
+                        if read_bytes > max_onnx_bytes:
+                            raise OcrModelError("ONNX model dosyası güvenlik boyut sınırını aştı.")
+                        fh.write(chunk)
+                        if total_bytes > 0 and progress_cb:
+                            pct = int(15 + (read_bytes / total_bytes) * 75)
+                            progress_cb(min(90, max(15, pct)))
 
-        tmp_model.replace(dest_model)
+            tmp_model.replace(dest_model)
+        finally:
+            tmp_model.unlink(missing_ok=True)
         self._normalize_dict_for_onnx(dest_model, dest_dict)
 
     def remove_pack(self, pack_code: str) -> bool:

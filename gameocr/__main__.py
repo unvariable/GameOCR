@@ -285,6 +285,7 @@ def main() -> int:
 
     # Tek örnek (Single Instance) IPC sunucusu
     ipc_server = QLocalServer(app)
+    ipc_server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
     QLocalServer.removeServer(ipc_name)
     if ipc_server.listen(ipc_name):
         def _on_ipc_connection() -> None:

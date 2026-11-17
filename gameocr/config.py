@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import tomli_w
+
+from .security import harden_private_path
 from dotenv import load_dotenv
 
 log = logging.getLogger(__name__)
@@ -261,8 +263,11 @@ def load_config(path: Path = CONFIG_FILE) -> Config:
 def save_config(cfg: Config, path: Path = CONFIG_FILE) -> None:
     with _save_lock:
         path.parent.mkdir(parents=True, exist_ok=True)
+        harden_private_path(path.parent, is_dir=True)
         tmp = path.with_suffix(".tmp")
         with tmp.open("wb") as fh:
             tomli_w.dump(cfg.to_dict(), fh)
+        harden_private_path(tmp, is_dir=False)
         tmp.replace(path)  # atomik yazım: yarım dosya kalmaz
+        harden_private_path(path, is_dir=False)
     log.debug("Config kaydedildi: %s", path)

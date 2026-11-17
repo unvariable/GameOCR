@@ -33,6 +33,8 @@ import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+
+from .security import safe_extract_zip, validate_https_url
 from typing import Any, Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -548,18 +550,24 @@ class LocalModelManager:
 
             dest_dir = self._ensure_pack_files(sub_code)
             try:
+                validate_https_url(url)
                 log.info("CTranslate2 model arşivi indiriliyor: %s -> %s", url, dest_dir)
                 req = urllib.request.Request(url, headers={"User-Agent": "GameOCR/1.0"})
+                max_download_bytes = 512 * 1024 * 1024
                 with urllib.request.urlopen(req, timeout=90) as resp:
                     total_bytes = int(resp.headers.get("Content-Length") or 0)
+                    if total_bytes > max_download_bytes:
+                        raise ValueError(f"Model arşivi boyut sınırını aşıyor: {total_bytes}")
                     buf = io.BytesIO()
                     read_bytes = 0
                     while True:
                         chunk = resp.read(131072)
                         if not chunk:
                             break
-                        buf.write(chunk)
                         read_bytes += len(chunk)
+                        if read_bytes > max_download_bytes:
+                            raise ValueError("Model arşivi indirilirken boyut sınırı aşıldı.")
+                        buf.write(chunk)
                         if total_bytes > 0 and progress_cb:
                             sub_pct = read_bytes / total_bytes
                             overall = int(10 + ((idx + sub_pct) / total_sub) * 75)
@@ -567,7 +575,7 @@ class LocalModelManager:
 
                 buf.seek(0)
                 with zipfile.ZipFile(buf) as zf:
-                    zf.extractall(dest_dir)
+                    safe_extract_zip(zf, dest_dir, max_total_bytes=max_download_bytes)
                 log.info("CTranslate2 model paketi açıldı: %s", sub_code)
             except Exception as exc:
                 log.warning("Çevrimiçi model ağırlığı indirilemedi (%s): %s", sub_code, exc)

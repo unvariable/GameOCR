@@ -18,6 +18,8 @@ from pathlib import Path
 
 from rapidfuzz import fuzz, process
 
+from .security import harden_private_path
+
 log = logging.getLogger(__name__)
 
 _SCHEMA = """
@@ -43,8 +45,10 @@ class CacheStore:
     def __init__(self, path: Path, max_entries: int = 5000) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        harden_private_path(self.path.parent, is_dir=True)
         self._lock = threading.Lock()
         self._db = sqlite3.connect(str(self.path), check_same_thread=False)
+        harden_private_path(self.path, is_dir=False)
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA synchronous=NORMAL")
         self._db.executescript(_SCHEMA)

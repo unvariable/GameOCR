@@ -134,7 +134,7 @@ def _sync_kde_command_shortcuts(cfg: HotkeysConfig) -> None:
     )
     try:
         trigger_script.write_text(trigger_content)
-        trigger_script.chmod(0o755)
+        trigger_script.chmod(0o700)
     except Exception as exc:
         log.debug("gameocr-trigger oluşturulamadı: %s", exc)
 

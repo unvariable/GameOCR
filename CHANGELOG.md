@@ -4,6 +4,21 @@ Bu belge, GameOCR projesinde yapılan değişiklikleri, kök neden analizlerini,
 
 ---
 
+## [0.2.1] — 2026-11-17 (Güvenlik, Bağımlılık Temizliği ve Gizlilik Sertleştirmesi)
+
+### Öne Çıkanlar (Release Özeti)
+- **Dependabot `stanza` (CWE-502) Güvenlik Açığı Giderildi:** Kullanılmayan `argostranslate` opsiyonel bağımlılığı kaldırılarak etkilenen `stanza<=1.12.1` (ve `torch`, `spacy` vb. 50+ gereksiz paket) tamamen temizlendi; `pyproject.toml` içine kalıcı `stanza>=1.12.2` güvenlik alt sınırı eklendi.
+- **Arşiv ve Ağ İndirme Güvenliği (`gameocr/security.py`):**
+  - Model indirmelerinde `https://` şema zorunluluğu (`validate_https_url`) ve indirme boyut üst sınırı getirildi.
+  - `.argosmodel` (ZIP) arşivlerinin açılmasında Zip Slip (path traversal), sembolik link ve Zip Bomb koruması (`safe_extract_zip`) eklendi.
+- **Kullanıcı Gizliliği ve Veri Koruma:**
+  - DeepL API anahtarını içeren `config.toml`, çeviri önbelleği `cache.db` ve `gameocr.log` için POSIX sistemlerde `0o600` (dizinler `0o700`) erişim izinleri zorunlu kılındı.
+  - Tüm log handler'larına `_SecretRedactingFilter` eklenerek API anahtarları ve `Authorization` başlıklarının loglara sızması (`[REDACTED]`) engellendi.
+  - Tek-örnek IPC sunucusu (`QLocalServer`) için `UserAccessOption` ve KDE kısayol tetikleyici betiği için `0o700` izni uygulandı.
+- **Topluluk Standartları:** `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md` ve `SECURITY.md` standartlara uygun ve net hale getirildi.
+
+---
+
 ## [0.2.0] — 2026-11-16 (Linux Masaüstü Taşınabilirliği, Evrensel Kontrol Merkezi ve Windows Self-Capture / Performans Düzeltmeleri)
 
 ### Öne Çıkanlar (Release Özeti)

@@ -1,6 +1,6 @@
 [project]
 name = "gameocr"
-version = "0.2.0"
+version = "0.2.1"
 description = "Oyun altyazılarını OCR ile okuyup DeepL ile çeviren ve şeffaf overlay olarak gösteren araç"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -25,8 +25,8 @@ dependencies = [
 
 [project.optional-dependencies]
 local = [
-    "argostranslate>=1.9",
     "ctranslate2>=4.0",
+    "sentencepiece>=0.2",
 ]
 windows = [
     "dxcam>=0.0.5; sys_platform == 'win32'",
@@ -47,6 +47,10 @@ dev = ["pytest>=8"]
 # Wheel CUDA/cuDNN kütüphanelerini nvidia-* paketleriyle getirir; sistemde
 # yalnızca NVIDIA sürücüsü gerekir.
 index-strategy = "unsafe-best-match"
+# Güvenlik alt sınırları (Dependabot / CVE-502 vb. düzeltmeleri korur)
+constraint-dependencies = [
+    "stanza>=1.12.2",
+]
 
 [[tool.uv.index]]
 name = "paddle-cu126"
