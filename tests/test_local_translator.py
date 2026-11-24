@@ -148,3 +148,78 @@ def test_local_translate_tr_en_real_ctranslate2(tmp_path: Path) -> None:
     assert any(w in out.lower() for w in ("afraid", "fear", "innovation", "why", "need"))
 
 
+def test_translator_deepl_v2_client_and_usage_without_valid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """deepl 2.0.0 API'si (Translator yok, DeepLClient var, Detail.valid yok) tam uyumlu çalışmalıdır."""
+    import types
+    import gameocr.translator as tr_mod
+
+    class _DetailNoValid:
+        def __init__(self, count: int, limit: int) -> None:
+            self.count = count
+            self.limit = limit
+
+    class _FakeDeepLClient:
+        def __init__(self, auth_key: str, send_platform_info: bool = True) -> None:
+            self.auth_key = auth_key
+            self.send_platform_info = send_platform_info
+
+        def get_usage(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(character=_DetailNoValid(12345, 500000))
+
+        def translate_text(self, text: str, source_lang: str = "", target_lang: str = "", **kwargs):
+            return types.SimpleNamespace(text=f"[v2:{source_lang}->{target_lang}] {text}")
+
+    fake_deepl_v2 = types.SimpleNamespace(
+        DeepLClient=_FakeDeepLClient,
+        AuthorizationException=type("AuthorizationException", (Exception,), {}),
+        QuotaExceededException=type("QuotaExceededException", (Exception,), {}),
+        TooManyRequestsException=type("TooManyRequestsException", (Exception,), {}),
+        ConnectionException=type("ConnectionException", (Exception,), {}),
+        DeepLException=type("DeepLException", (Exception,), {}),
+    )
+    monkeypatch.setattr(tr_mod, "deepl", fake_deepl_v2)
+
+    mgr = LocalModelManager(models_dir=tmp_path / "models")
+    tr = Translator(DeepLConfig(auth_key="dummy-key:fx"), engine="deepl", local_manager=mgr)
+    assert tr.usage() == (12345, 500000)
+    assert tr.translate("Hello", "EN", "TR") == "[v2:EN->TR] Hello"
+
+
+def test_translator_usage_and_worker_resilient_to_unexpected_error(tmp_path: Path) -> None:
+    """usage() beklenmeyen bir hata fırlatsa bile None dönmeli ve TranslatorWorker çökmemelidir."""
+    import queue
+    import threading
+    from unittest.mock import MagicMock
+    from gameocr.cache_store import CacheStore
+    from gameocr.workers import TranslatorWorker
+
+    mgr = LocalModelManager(models_dir=tmp_path / "models")
+    tr = Translator(DeepLConfig(auth_key="dummy-key:fx"), engine="deepl", local_manager=mgr)
+    bad_client = MagicMock()
+    bad_client.get_usage.side_effect = AttributeError("unexpected sdk change")
+    tr._client = bad_client
+    tr._key = "dummy-key:fx"
+
+    assert tr.usage() is None
+
+    mock_tr = MagicMock()
+    mock_tr.usage.side_effect = AttributeError("unexpected boom")
+    cache = CacheStore(tmp_path / "cache.sqlite")
+    try:
+        worker = TranslatorWorker(
+            translator=mock_tr,
+            cfg=Config(),
+            cache_store=cache,
+            translate_q=queue.Queue(),
+            ui_q=queue.Queue(),
+            filter_control_q=queue.Queue(),
+            control_q=queue.Queue(),
+            stop_event=threading.Event(),
+        )
+        worker._check_usage()  # Hata fırlatmadan tamamlanmalı
+    finally:
+        cache.close()
+
+

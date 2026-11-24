@@ -111,7 +111,7 @@ Bu belge, GameOCR projesinde yapılan değişiklikleri, kök neden analizlerini,
   - `test_tray_icon_writes_xdg_theme_png`: `get_tray_icon()` fonksiyonunun `XDG_DATA_HOME/icons/hicolor/64x64/apps/gameocr.png` dosyasını ürettiği doğrulandı.
   - `test_single_instance_ipc_notify`: `QLocalServer` + `_try_notify_running_instance` ile `"SHOW"` IPC iletimi doğrulandı.
 - **Birim Test Paketi (`uv run pytest -v`):** **82/82** test (`9.06s`) başarıyla geçti.
-- **Canlı VM Doğrulaması (`Linux Mint Cinnamon` — `taner@192.168.221.129`, sıfır ek paket kurulumu):**
+- **Canlı Doğrulama (`Linux Mint Cinnamon`, sıfır ek paket kurulumu):**
   - `GameOCR-Universal-x86_64.AppImage` (`824M`, `--de other --display hybrid`) çalıştırıldığında `GameOCR — Kontrol Merkezi` penceresi açıldı, X11 klavye olayı (`KeyPress`/`KeyRelease`) sonrası çökmeden çalıştı (`GAMEOCR_ALIVE_AFTER_KEYPRESS`), `StatusNotifierItem.IconName` `"gameocr"` olarak doğrulandı ve `LANG=tr_TR.UTF-8` altında canlı OCR (`güven=0.99`) + lokal çeviri çalıştı.
 
 ---

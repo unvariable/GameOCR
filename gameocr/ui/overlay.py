@@ -32,8 +32,10 @@ from PyQt6.QtGui import (
     QPaintEvent,
     QPainter,
     QPainterPath,
+    QPalette,
     QPen,
     QRegion,
+    QResizeEvent,
     QTextDocument,
 )
 from PyQt6.QtWidgets import QApplication, QWidget
@@ -172,6 +174,7 @@ class OverlayWindow(QWidget):
         self._blur_active: bool = False
         self._last_blur_geo: tuple[int, int] = (0, 0)
         self._last_win32_mask_rect: tuple[int, int, int, int] | None = None
+        self._last_win32_exact_mode: bool = False
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -184,6 +187,9 @@ class OverlayWindow(QWidget):
         # Bu nedenle Windows üzerinde setMask(QRegion) + setWindowOpacity() ile saydamlık sağlanır.
         if sys.platform != "win32":
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        else:
+            self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+            self._apply_win32_dark_palette()
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
         ensure_kwin_rule()
@@ -215,6 +221,7 @@ class OverlayWindow(QWidget):
         else:
             display_text = (self._status_text or self._text or "").strip()
             if display_text:
+                self._prepare_win32_surface()
                 self.fade_in(150)
 
     # ------------------------------------------------------------------ #
@@ -228,8 +235,19 @@ class OverlayWindow(QWidget):
     def panelOpacity(self, value: float) -> None:
         self._opacity = max(0.0, min(1.0, float(value)))
         if sys.platform == "win32":
-            self._apply_win32_window_opacity()
+            self._apply_win32_window_opacity(exact_mode=self._last_win32_exact_mode)
         self.update()
+
+    def _apply_win32_dark_palette(self, color_hex: str | None = None) -> None:
+        """Windows'ta sistem varsayılanı açık gri (#F0F0F0) pencere arka planını bastırır."""
+        if sys.platform != "win32":
+            return
+        bg = QColor(color_hex or self.cfg.panel_color)
+        if not bg.isValid():
+            bg = QColor("#0F0F14")
+        pal = self.palette()
+        pal.setColor(QPalette.ColorRole.Window, bg)
+        self.setPalette(pal)
 
     def _apply_win32_window_opacity(self, exact_mode: bool = False) -> None:
         base_alpha = max(0.0, min(1.0, float(self.cfg.opacity)))
@@ -239,20 +257,55 @@ class OverlayWindow(QWidget):
             target = max(0.12, base_alpha) * self._opacity if base_alpha > 0.01 else self._opacity
         self.setWindowOpacity(max(0.0, min(1.0, target)))
 
-    def _sync_win32_mask(self, panel_rect: QRectF) -> None:
+    def _sync_win32_mask(self, panel_rect: QRectF) -> bool:
         """Windows'ta yalnızca çizilen panel dikdörtgenini görünür kılar (dışı tamamen şeffaftır)."""
         if sys.platform != "win32":
-            return
+            return False
         import math
 
         rx = max(0, int(math.floor(panel_rect.x())))
         ry = max(0, int(math.floor(panel_rect.y())))
-        rw = max(1, int(math.ceil(panel_rect.width())))
-        rh = max(1, int(math.ceil(panel_rect.height())))
+        max_w = (
+            max(1, self.width() - rx)
+            if self.width() > 0
+            else max(1, int(math.ceil(panel_rect.right())) - rx)
+        )
+        max_h = (
+            max(1, self.height() - ry)
+            if self.height() > 0
+            else max(1, int(math.ceil(panel_rect.bottom())) - ry)
+        )
+        rw = max(1, min(max_w, int(math.ceil(panel_rect.right())) - rx))
+        rh = max(1, min(max_h, int(math.ceil(panel_rect.bottom())) - ry))
         key = (rx, ry, rw, rh)
         if self._last_win32_mask_rect != key:
             self._last_win32_mask_rect = key
             self.setMask(QRegion(QRect(rx, ry, rw, rh)))
+            return True
+        return False
+
+    def _prepare_win32_surface(self) -> None:
+        """Windows'ta QPainter açılmadan ÖNCE maskeyi, paleti ve pencere opaklığını günceller."""
+        if sys.platform != "win32":
+            return
+        display_text = (self._status_text or self._text or "").strip()
+        w, h = float(self.width()), float(self.height())
+        if not self._user_visible or not display_text or w < 10 or h < 10:
+            return
+        panel_rect, _text_rect, _font, _text_color, _alignment, mode = self.compute_render_layout(
+            w, h, display_text
+        )
+        self._last_win32_exact_mode = (mode == "exact")
+        if mode == "exact" and self._style_meta is not None:
+            self._apply_win32_dark_palette(
+                getattr(self._style_meta, "bg_color_hex", "") or self.cfg.panel_color
+            )
+        else:
+            self._apply_win32_dark_palette(self.cfg.panel_color)
+        mask_changed = self._sync_win32_mask(panel_rect)
+        self._apply_win32_window_opacity(exact_mode=self._last_win32_exact_mode)
+        if mask_changed and self.isVisible():
+            self.update(self.rect())
 
     def _on_anim_finished(self) -> None:
         if self._opacity <= 0.01:
@@ -273,16 +326,18 @@ class OverlayWindow(QWidget):
     def show_status(self, text: str) -> None:
         """Kısa süreli durum mesajı (örneğin [DURAKLATILDI]) gösterir."""
         self._status_text = text
+        self._prepare_win32_surface()
         self.fade_in(100)
 
     def fade_in(self, duration_ms: int = 150) -> None:
         if not self._user_visible:
             return
+        self._prepare_win32_surface()
         self.show()
         self.raise_()
         set_x11_always_on_top(int(self.winId()))
         self._apply_blur()
-        self.update()
+        self.update(self.rect())
 
         if self.isVisible() and self._opacity >= 0.98:
             return
@@ -319,8 +374,14 @@ class OverlayWindow(QWidget):
         self._active_geometry = (x, y, w, h)
         self._last_win32_mask_rect = None
         self.setGeometry(x, y, w, h)
+        self._prepare_win32_surface()
         self._apply_blur()
         set_x11_always_on_top(int(self.winId()))
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._last_win32_mask_rect = None
+        self._prepare_win32_surface()
 
     def _apply_blur(self) -> None:
         w, h = self.width(), self.height()
@@ -343,9 +404,11 @@ class OverlayWindow(QWidget):
 
     def update_config(self, cfg: OverlayConfig) -> None:
         self.cfg = cfg
+        self._apply_win32_dark_palette()
+        self._prepare_win32_surface()
         self._apply_blur()
         set_x11_always_on_top(int(self.winId()))
-        self.update()
+        self.update(self.rect())
 
     # ------------------------------------------------------------------ #
     # Kuyruk Dinleme (ui_q)
@@ -383,7 +446,8 @@ class OverlayWindow(QWidget):
 
             self._text = msg.text
             self._style_meta = new_meta
-            self.update()
+            self._prepare_win32_surface()
+            self.update(self.rect())
             self.fade_in(150)
 
         elif msg.kind == UiKind.CLEAR:
@@ -397,6 +461,7 @@ class OverlayWindow(QWidget):
         elif msg.kind == UiKind.STATUS:
             self._status_text = msg.text
             if self._user_visible:
+                self._prepare_win32_surface()
                 self.fade_in(100)
 
         elif msg.kind == UiKind.GEOMETRY:
@@ -620,9 +685,6 @@ class OverlayWindow(QWidget):
         panel_rect, text_rect, font, text_color, alignment, mode = self.compute_render_layout(
             w, h, display_text
         )
-        if sys.platform == "win32":
-            self._sync_win32_mask(panel_rect)
-            self._apply_win32_window_opacity(exact_mode=(mode == "exact"))
         radius = float(self.cfg.corner_radius)
 
         # 1. Arka plan paneli
@@ -642,14 +704,23 @@ class OverlayWindow(QWidget):
                 bg_luma = self._color_luma(c_bg)
                 exact_alpha = 255 if sys.platform == "win32" else int(max(base_alpha, 0.96) * self._opacity * 255)
                 c_bg.setAlpha(exact_alpha)
-                painter.setBrush(c_bg)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRoundedRect(
-                    panel_rect.adjusted(0.5, 0.5, -0.5, -0.5),
-                    min(radius, 6.0),
-                    min(radius, 6.0),
-                )
+                if sys.platform == "win32":
+                    painter.fillRect(self.rect(), c_bg)
+                else:
+                    painter.setBrush(c_bg)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawRoundedRect(
+                        panel_rect.adjusted(0.5, 0.5, -0.5, -0.5),
+                        min(radius, 6.0),
+                        min(radius, 6.0),
+                    )
             else:
+                if sys.platform == "win32":
+                    base_panel = QColor(self.cfg.panel_color)
+                    if not base_panel.isValid():
+                        base_panel = QColor("#0F0F14")
+                    base_panel.setAlpha(255)
+                    painter.fillRect(self.rect(), base_panel)
                 gradient = QLinearGradient(0, panel_rect.top(), 0, panel_rect.bottom())
                 # Blur açıkken buzlu cam efektinin arkasındaki oyunu göstermesi için panel yarı saydamdır
                 panel_alpha = int(alpha * 0.70) if self.cfg.blur else alpha

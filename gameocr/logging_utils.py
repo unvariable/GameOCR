@@ -10,6 +10,8 @@ from __future__ import annotations
 import contextlib
 import functools
 import logging
+import sys
+import threading
 import time
 import traceback
 from logging.handlers import RotatingFileHandler
@@ -19,6 +21,42 @@ from typing import Any, Callable, Iterator, TypeVar
 from .security import harden_private_path, redact_secrets
 
 F = TypeVar("F", bound=Callable[..., Any])
+_HOOKS_INSTALLED = False
+
+
+def _install_exception_hooks() -> None:
+    """Windows --windowed derlemelerinde yakalanmamış istisnaları da log dosyasına kaydeder."""
+    global _HOOKS_INSTALLED
+    if _HOOKS_INSTALLED:
+        return
+    _HOOKS_INSTALLED = True
+
+    orig_sys_hook = sys.excepthook
+    orig_thread_hook = getattr(threading, "excepthook", None)
+
+    def _sys_excepthook(exc_type: type[BaseException], exc_value: BaseException, exc_tb: Any) -> None:
+        if not issubclass(exc_type, KeyboardInterrupt):
+            logging.getLogger("gameocr").critical(
+                "Yakalanmamış ana iş parçacığı hatası",
+                exc_info=(exc_type, exc_value, exc_tb),
+            )
+        if orig_sys_hook is not None:
+            orig_sys_hook(exc_type, exc_value, exc_tb)
+
+    def _thread_excepthook(args: threading.ExceptHookArgs) -> None:
+        if args.exc_type is not KeyboardInterrupt:
+            tname = args.thread.name if args.thread is not None else "unknown"
+            logging.getLogger("gameocr").critical(
+                "Yakalanmamış arka plan iş parçacığı hatası (%s)",
+                tname,
+                exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            )
+        if orig_thread_hook is not None:
+            orig_thread_hook(args)
+
+    sys.excepthook = _sys_excepthook
+    if hasattr(threading, "excepthook"):
+        threading.excepthook = _thread_excepthook
 
 
 class _SecretRedactingFilter(logging.Filter):
@@ -174,4 +212,6 @@ def setup_logging(level_name: str = "INFO", log_dir: Path | None = None) -> None
             harden_private_path(log_file, is_dir=False)
         except OSError:
             pass
+
+    _install_exception_hooks()
 

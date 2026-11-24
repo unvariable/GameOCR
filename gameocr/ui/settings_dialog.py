@@ -7,6 +7,7 @@ i18n desteği ile Türkçe ve İngilizce arayüz sağlar.
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Callable
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -244,6 +245,13 @@ class SettingsDialog(QDialog):
 
         main_layout.addLayout(btn_layout)
 
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if sys.platform == "win32":
+            from ..capture.win32_backend import set_win32_exclude_from_capture
+
+            set_win32_exclude_from_capture(int(self.winId()), exclude=True)
+
     def _build_all_tabs(self) -> None:
         self._build_lang_tab()
         self._build_cache_tab()
@@ -475,7 +483,11 @@ class SettingsDialog(QDialog):
 
     def _refresh_quota(self) -> None:
         if self.translator is not None:
-            usage = self.translator.usage()
+            try:
+                usage = self.translator.usage()
+            except Exception as exc:
+                log.warning("Ayarlar kota yenileme hatası: %s", exc)
+                usage = None
             if usage:
                 count, limit = usage
                 percent = int((count / max(1, limit)) * 100)

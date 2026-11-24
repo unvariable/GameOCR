@@ -349,6 +349,13 @@ class WindowPickerDialog(QDialog):
         layout.addLayout(btn_row)
         self._populate_table()
 
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if sys.platform == "win32":
+            from ..capture.win32_backend import set_win32_exclude_from_capture
+
+            set_win32_exclude_from_capture(int(self.winId()), exclude=True)
+
     def _refresh_list(self) -> None:
         self._all_entries = list_win32_windows() if sys.platform == "win32" else list_x11_windows()
         self._apply_filter(self.search_edit.text())

@@ -38,7 +38,7 @@ from gameocr.cache_store import CacheStore
 from gameocr.capture.base import OverlayHandle
 from gameocr.config import CACHE_DB_FILE, LOGS_DIR, Config, load_config, save_config
 from gameocr.i18n import set_language, t
-from gameocr.logging_utils import setup_logging
+from gameocr.logging_utils import log_stage_exception, setup_logging
 from gameocr.messages import UiKind, UiMessage
 from gameocr.pipeline import Pipeline
 from gameocr.ui.control_window import ControlWindow
@@ -247,16 +247,20 @@ def main() -> int:
             tray.update_status()
             control_window.update_config(new_cfg)
 
-        _active_settings_dialog = SettingsDialog(
-            cfg=pipeline.cfg,
-            cache_store=cache_store,
-            translator=pipeline.translator,
-            on_applied=handle_applied,
-            on_select_window=on_select_window,
-        )
-        _active_settings_dialog.show()
-        _active_settings_dialog.raise_()
-        _active_settings_dialog.activateWindow()
+        try:
+            _active_settings_dialog = SettingsDialog(
+                cfg=pipeline.cfg,
+                cache_store=cache_store,
+                translator=pipeline.translator,
+                on_applied=handle_applied,
+                on_select_window=on_select_window,
+            )
+            _active_settings_dialog.show()
+            _active_settings_dialog.raise_()
+            _active_settings_dialog.activateWindow()
+        except Exception as exc:
+            log_stage_exception(log, "open_settings_dialog", exc)
+            tray.show_notification("Hata", f"Ayarlar penceresi açılamadı: {exc}")
 
     def on_toggle_overlay(visible: bool | None = None) -> None:
         if visible is None:

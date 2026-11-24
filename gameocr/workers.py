@@ -655,7 +655,11 @@ class TranslatorWorker(threading.Thread):
         log.info("TranslatorWorker sonlandı")
 
     def _check_usage(self) -> None:
-        usage = self.translator.usage()
+        try:
+            usage = self.translator.usage()
+        except Exception as exc:
+            log.warning("DeepL kota kontrolü başarısız: %s", exc)
+            return
         if usage:
             count, limit = usage
             self.ui_q.put(UiMessage(UiKind.USAGE, data=usage))

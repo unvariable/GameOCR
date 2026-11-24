@@ -1,14 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files
-from PyInstaller.utils.hooks import collect_dynamic_libs
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 
 datas = [('config.default.toml', '.')]
 binaries = []
-hiddenimports = ['gameocr', 'gameocr.__main__', 'gameocr.ocr_models', 'gameocr.ui.overlay', 'gameocr.ui.settings_dialog', 'gameocr.ui.window_picker', 'gameocr.local_models', 'rapidocr_onnxruntime', 'onnxruntime', 'ctranslate2', 'sentencepiece', 'rapidfuzz', 'deepl', 'tomli_w', 'cv2', 'numpy', 'dbus_fast', 'dbus_fast.aio', 'Xlib', 'gameocr.capture.portal_backend']
-datas += collect_data_files('rapidocr_onnxruntime')
+hiddenimports = ['gameocr', 'gameocr.__main__', 'gameocr.ocr_engine', 'gameocr.ui.overlay', 'gameocr.ui.settings_dialog', 'gameocr.ui.window_picker', 'gameocr.local_models', 'rapidocr_onnxruntime', 'onnxruntime', 'ctranslate2', 'sentencepiece', 'rapidfuzz', 'deepl', 'tomli_w', 'cv2', 'numpy', 'dbus_fast', 'dbus_fast.aio', 'Xlib', 'Xlib.ext.composite', 'mss', 'gameocr.capture.win32_backend']
 hiddenimports += collect_submodules('gameocr')
+tmp_ret = collect_all('rapidocr_onnxruntime')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('onnxruntime')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('ctranslate2')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
@@ -22,7 +23,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'scipy', 'notebook', 'IPython'],
+    excludes=['tkinter', 'matplotlib', 'scipy', 'notebook', 'IPython', 'paddle', 'paddleocr', 'paddlex'],
     noarchive=False,
     optimize=0,
 )

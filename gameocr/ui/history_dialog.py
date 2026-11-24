@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import sys
 from typing import Any
 
 from PyQt6.QtCore import Qt
@@ -119,6 +120,13 @@ class HistoryDialog(QDialog):
         layout.addLayout(btn_row)
 
         self.reload_data()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if sys.platform == "win32":
+            from ..capture.win32_backend import set_win32_exclude_from_capture
+
+            set_win32_exclude_from_capture(int(self.winId()), exclude=True)
 
     def reload_data(self) -> None:
         query = self.search_edit.text().strip()

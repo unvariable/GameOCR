@@ -316,6 +316,86 @@ def test_win32_overlay_mask_and_large_roi_upscale_skip(monkeypatch: pytest.Monke
     ov.close()
 
 
+def test_win32_overlay_mask_updates_before_paint_no_gray_clipping(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Aşama 28: Kısa altyazı görünürken araya CLEAR girmeden daha geniş/uzun yeni altyazı
+    geldiğinde maske paintEvent() ÖNCESİNDE büyümeli, paintEvent() içinde setMask/setWindowOpacity
+    çağrılmamalı ve genişleyen alanda açık gri (#F0F0F0) sızıntı kalmamalıdır.
+    """
+    import os
+    from PyQt6.QtWidgets import QApplication
+    from gameocr.config import OverlayConfig
+    from gameocr.messages import TextStyleMeta, UiKind, UiMessage
+    import gameocr.ui.overlay as overlay_mod
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _app = QApplication.instance() or QApplication([])
+
+    monkeypatch.setattr(overlay_mod.sys, "platform", "win32")
+    monkeypatch.setattr(overlay_mod, "set_win32_topmost_clickthrough", lambda hwnd: True)
+    monkeypatch.setattr(overlay_mod, "ensure_kwin_rule", lambda: None)
+
+    ov = overlay_mod.OverlayWindow(OverlayConfig(opacity=0.0, exact_alignment=True))
+    ov.setGeometry(0, 0, 900, 160)
+    ov.show()
+
+    # 1) Kısa 1 satırlık altyazı
+    meta_short = TextStyleMeta(
+        bbox_rel=(0.02, 0.10, 0.25, 0.22),
+        line_height_px=24,
+        text_color_hex="#60D0FF",
+        bg_color_hex="#282830",
+    )
+    ov._handle_ui_message(UiMessage(UiKind.SHOW, text="Kısa cümle.", data=meta_short))
+    ov._anim.stop()
+    ov._opacity = 1.0
+    m1 = ov._last_win32_mask_rect
+    assert m1 is not None
+
+    # 2) Doğrudan (CLEAR olmadan) daha geniş ve 2 satırlık altyazı
+    meta_long = TextStyleMeta(
+        bbox_rel=(0.02, 0.10, 0.80, 0.65),
+        line_height_px=24,
+        text_color_hex="#60D0FF",
+        bg_color_hex="#282830",
+    )
+    ov._handle_ui_message(
+        UiMessage(
+            UiKind.SHOW,
+            text="Ama eğer olsaydı... Neden? Kimsenin posterleri değiştirmek için ne sebebi olabilir ki?",
+            data=meta_long,
+        )
+    )
+    m2 = ov._last_win32_mask_rect
+    assert m2 is not None
+    assert m2[2] > m1[2] and m2[3] > m1[3]
+
+    # 3) paintEvent() sırasında setMask / setWindowOpacity çağrılmamalı (spy)
+    calls: list[str] = []
+    orig_set_mask = ov.setMask
+    orig_set_opacity = ov.setWindowOpacity
+
+    def _spy_set_mask(*args, **kwargs):
+        calls.append("setMask")
+        return orig_set_mask(*args, **kwargs)
+
+    def _spy_set_opacity(*args, **kwargs):
+        calls.append("setWindowOpacity")
+        return orig_set_opacity(*args, **kwargs)
+
+    monkeypatch.setattr(ov, "setMask", _spy_set_mask)
+    monkeypatch.setattr(ov, "setWindowOpacity", _spy_set_opacity)
+
+    img = ov.grab().toImage()
+    assert calls == []
+
+    # 4) Eski m1 dışında kalan, yeni m2 içindeki sağ-alt piksel koyu arka planla (#282830) boyanmış olmalı
+    px = m2[0] + m2[2] - 4
+    py = m2[1] + m2[3] - 4
+    c = img.pixelColor(px, py)
+    assert max(c.red(), c.green(), c.blue()) < 100
+    ov.close()
+
+
 
 
 

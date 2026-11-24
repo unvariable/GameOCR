@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from typing import Any
 
 import deepl
 
@@ -39,18 +40,24 @@ class Translator:
         self.max_attempts = max_attempts
         self.engine = (engine or "deepl").strip().lower()
         self.local_manager = local_manager or LocalModelManager()
-        self._client: deepl.Translator | None = None
+        self._client: Any = None
         self._key = ""
         self._lock = threading.Lock()
         self.last_latency_ms: float = 0.0
 
-    def _get_client(self) -> deepl.Translator:
+    def _get_client(self) -> Any:
         key = self.cfg.resolved_key()
         if not key:
             raise TranslatorError("DeepL API anahtarı yok (Ayarlar → DeepL)", fatal=True)
         with self._lock:
             if self._client is None or key != self._key:
-                self._client = deepl.Translator(key, send_platform_info=False)
+                client_cls = getattr(deepl, "DeepLClient", None) or getattr(deepl, "Translator", None)
+                if client_cls is None:
+                    raise TranslatorError(
+                        "DeepL istemci sınıfı bulunamadı (uyumsuz deepl sürümü)",
+                        fatal=True,
+                    )
+                self._client = client_cls(key, send_platform_info=False)
                 self._key = key
                 log.info("DeepL istemcisi hazır (%s)", "Free" if key.endswith(":fx") else "Pro")
             return self._client
@@ -158,6 +165,14 @@ class Translator:
         except (TranslatorError, deepl.DeepLException) as exc:
             log.debug("Kullanım bilgisi alınamadı: %s", exc)
             return None
-        if u.character is None or not u.character.valid:
+        except Exception as exc:
+            log.warning("DeepL kullanım bilgisi alınırken beklenmeyen hata: %s", exc)
             return None
-        return int(u.character.count), int(u.character.limit or self.cfg.free_char_limit)
+        char = getattr(u, "character", None)
+        if char is None or not getattr(char, "valid", True):
+            return None
+        count = getattr(char, "count", None)
+        if count is None:
+            return None
+        limit = getattr(char, "limit", None)
+        return int(count), int(limit or self.cfg.free_char_limit)

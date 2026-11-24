@@ -115,4 +115,22 @@ def test_settings_dialog_auto_save_on_close(qapp):
     assert applied_cfgs[-1].deepl.auth_key == "updated_key:fx"
 
 
+def test_settings_dialog_survives_usage_exception(qapp) -> None:
+    """translator.usage() beklenmeyen hata fırlatsa bile SettingsDialog çökmeden açılmalıdır."""
+    from unittest.mock import MagicMock
+    from gameocr.config import Config
+    from gameocr.ui.settings_dialog import SettingsDialog
+    from gameocr.translator import Translator
+
+    cfg = Config()
+    cfg.deepl.auth_key = "dummy-key:fx"
+    mock_trans = MagicMock(spec=Translator)
+    mock_trans.cfg = cfg.deepl
+    mock_trans.usage.side_effect = AttributeError("'Detail' object has no attribute 'valid'")
+
+    dialog = SettingsDialog(cfg, translator=mock_trans)
+    assert dialog.quota_bar.value() == 0
+    dialog.close()
+
+
 
