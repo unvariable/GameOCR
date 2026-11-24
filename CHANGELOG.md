@@ -4,6 +4,24 @@ Bu belge, GameOCR projesinde yapılan değişiklikleri, kök neden analizlerini,
 
 ---
 
+## [0.2.2] — 2026-11-24 (Windows `deepl 2.0.0` Uyumluluğu, Ayarlar Çökmesi ve Overlay Çizim Düzeltmeleri)
+
+### Öne Çıkanlar (Release Özeti)
+- **`deepl 2.0.0` & `1.x` Çift Sürüm Uyumluluğu (`gameocr/translator.py`):**
+  - `deepl 2.0.0` ile kaldırılan `deepl.Translator` yerine `deepl.DeepLClient` (eski `1.x` sürümleri için `Translator` yedeği ile) otomatik seçilecek şekilde güncellendi.
+  - `Usage.Detail.valid` özelliğinin kaldırılmasına karşı güvenli kota okuma (`getattr(char, "valid", True)`) ve beklenmeyen SDK/ağ hataları için koruma eklendi.
+- **Windows Ayarlar Çökmesi (`0xc0000409`) ve Altyazı Görünmeme Sorunu Giderildi:**
+  - `TranslatorWorker._check_usage()` (`gameocr/workers.py`), `SettingsDialog._refresh_quota()` (`gameocr/ui/settings_dialog.py`) ve `on_open_settings()` (`gameocr/__main__.py`) hata korumalı hale getirilerek arka plan iş parçacığının durması ve PyQt6 slot istisnası kaynaklı çökme ortadan kaldırıldı.
+  - `--windowed` Windows derlemeleri için `sys.excepthook` ve `threading.excepthook` hata günlüğü (`gameocr/logging_utils.py`) eklendi.
+- **Windows Diyaloglarında Öz-Yakalama (Self-Capture) Koruması:**
+  - `SettingsDialog`, `WindowPickerDialog` ve `HistoryDialog` pencerelerine Windows `showEvent` içinde `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` uygulanarak bu pencerelerin OCR tarafından yakalanması engellendi.
+- **Windows Overlay Maske/Kırpma ve Açık Gri (`#F0F0F0`) Arka Plan Hatası Düzeltildi (`gameocr/ui/overlay.py`):**
+  - `paintEvent()` içinde `QPainter` açıldıktan sonra çalışan `_sync_win32_mask()` ve `_apply_win32_window_opacity()` yan etkileri kaldırılıp boyama öncesi çalışan `_prepare_win32_surface()` metoduna taşındı.
+  - Windows'ta `WA_OpaquePaintEvent`, koyu pencere paleti (`_apply_win32_dark_palette`) ve maske içi tam dolgu (`fillRect`) uygulanarak kısa bir altyazıdan doğrudan daha geniş/çok satırlı altyazıya geçerken oluşan yarım kırpma ve açık gri arka plan sızıntısı giderildi.
+- **Derleme Yapılandırması (`gameocr.spec`):** `rapidocr_onnxruntime`, `onnxruntime`, `win32_backend` ve `mss` paketleme tanımları güncellendi.
+
+---
+
 ## [0.2.1] — 2026-11-17 (Güvenlik, Bağımlılık Temizliği ve Gizlilik Sertleştirmesi)
 
 ### Öne Çıkanlar (Release Özeti)
