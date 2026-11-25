@@ -28,21 +28,24 @@ def _get_display() -> Any:
 
 def enable_win32_blur(hwnd: int, enable: bool = True) -> bool:
     """Windows DWM `DwmEnableBlurBehindWindow` API'si ile pencere arkası bulanıklığı açar/kapatır."""
-    if not hwnd:
+    if sys.platform != "win32" or not hwnd:
         return False
     try:
         import ctypes
+        from ctypes import wintypes
+
+        from ..capture.win32_backend import _Win32Api
 
         class DWM_BLURBEHIND(ctypes.Structure):
             _fields_ = [
-                ("dwFlags", ctypes.c_uint32),
-                ("fEnable", ctypes.c_int),
-                ("hRgnBlur", ctypes.c_void_p),
-                ("fTransitionOnMaximized", ctypes.c_int),
+                ("dwFlags", wintypes.DWORD),
+                ("fEnable", wintypes.BOOL),
+                ("hRgnBlur", wintypes.HANDLE),
+                ("fTransitionOnMaximized", wintypes.BOOL),
             ]
 
-        dwmapi = getattr(ctypes, "windll", None)
-        if dwmapi is None or not hasattr(dwmapi, "dwmapi"):
+        api = _Win32Api.get()
+        if api is None or api.dwmapi is None or not hasattr(api.dwmapi, "DwmEnableBlurBehindWindow"):
             return False
 
         bb = DWM_BLURBEHIND()
@@ -50,7 +53,7 @@ def enable_win32_blur(hwnd: int, enable: bool = True) -> bool:
         bb.fEnable = 1 if enable else 0
         bb.hRgnBlur = None
         bb.fTransitionOnMaximized = 0
-        hr = dwmapi.dwmapi.DwmEnableBlurBehindWindow(int(hwnd), ctypes.byref(bb))
+        hr = api.dwmapi.DwmEnableBlurBehindWindow(int(hwnd), ctypes.byref(bb))
         return hr == 0
     except Exception as exc:
         log.debug("Windows DWM blur uygulanamadı: %s", exc)

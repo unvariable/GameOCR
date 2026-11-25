@@ -131,3 +131,75 @@ def test_create_backend_selects_portal_on_wayland(monkeypatch: pytest.MonkeyPatc
     assert isinstance(backend, PortalBackend)
 
 
+def test_window_picker_fullscreen_option_and_pipeline_update_config_preserves_window(
+    qapp,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Aşama 32: WindowPickerDialog 'Tüm Ekran' seçeneğini desteklemeli ve
+    Pipeline.update_config canlı win32_hwnd / roi alanlarını ezmemelidir.
+    """
+    from gameocr.cache_store import CacheStore
+    from gameocr.pipeline import Pipeline
+
+    # 1) WindowPickerDialog Tüm Ekran butonu testi
+    entries = [WindowEntry(win_id=0x4444, title="Game Window", wm_class="game.exe", width=1280, height=720)]
+    dlg = WindowPickerDialog(entries=entries, allow_click_pick=False)
+    dlg._accept_full_screen()
+    assert dlg.selected_full_screen is True
+    assert dlg.selected_window_id == 0
+
+    full_screen_called = False
+
+    def fake_exec(self) -> int:
+        self.selected_full_screen = True
+        self.selected_window_id = 0
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(WindowPickerDialog, "exec", fake_exec)
+    monkeypatch.setattr("gameocr.ui.window_picker.list_x11_windows", lambda: entries)
+
+    def nonlocal_set() -> None:
+        nonlocal full_screen_called
+        full_screen_called = True
+
+    trigger_window_selection(
+        on_wayland_portal=lambda: None,
+        on_window_id_selected=lambda _wid: None,
+        force_session_type="x11",
+        on_full_screen=nonlocal_set,
+    )
+    assert full_screen_called is True
+
+    # 2) Pipeline.update_config canlı win32_hwnd ve roi alanlarını korumalı
+    import gameocr.pipeline as pipeline_mod
+    from gameocr.capture.win32_backend import Win32Backend
+
+    monkeypatch.setattr(pipeline_mod, "save_config", lambda cfg: None)
+    monkeypatch.setattr(pipeline_mod, "OcrEngine", lambda *a, **kw: type("FakeOcr", (), {"src_lang": "EN"})())
+
+    cfg = Config()
+    cfg.capture.backend = "win32"
+    cfg.capture.win32_hwnd = 0x7777
+    cfg.capture.roi = [0.1, 0.2, 0.3, 0.4]
+
+    cache = CacheStore(tmp_path / "cache.sqlite")
+    try:
+        import queue
+        pipe = Pipeline(cfg, cache_store=cache, ui_q=queue.Queue())
+        assert isinstance(pipe.backend, Win32Backend)
+
+        stale_copy = cfg.copy()
+        stale_copy.capture.win32_hwnd = 0
+        stale_copy.capture.roi = [0.0, 0.0, 0.0, 0.0]
+        stale_copy.general.log_level = "DEBUG"
+
+        pipe.update_config(stale_copy)
+        assert pipe.cfg.capture.win32_hwnd == 0x7777
+        assert pipe.cfg.capture.roi == [0.1, 0.2, 0.3, 0.4]
+        assert pipe.cfg.general.log_level == "DEBUG"
+    finally:
+        cache.close()
+
+
+

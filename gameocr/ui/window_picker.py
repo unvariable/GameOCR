@@ -218,7 +218,7 @@ def select_x11_window_by_click() -> int | None:
 
 
 def list_win32_windows() -> list[WindowEntry]:
-    """Windows (win32) üzerinde açık ve görünür pencereleri EnumWindows ile listeler."""
+    """Windows (win32) üzerinde açık ve görünür uygulama pencerelerini EnumWindows ile listeler."""
     if sys.platform != "win32":
         return []
     entries: list[WindowEntry] = []
@@ -226,42 +226,78 @@ def list_win32_windows() -> list[WindowEntry]:
         import ctypes
         from ctypes import wintypes
 
-        user32 = ctypes.windll.user32
-        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        from ..capture.win32_backend import _Win32Api, get_win32_window_rect, is_win32_window_cloaked
 
-        class RECT(ctypes.Structure):
-            _fields_ = [
-                ("left", ctypes.c_long),
-                ("top", ctypes.c_long),
-                ("right", ctypes.c_long),
-                ("bottom", ctypes.c_long),
-            ]
+        api = _Win32Api.get()
+        if api is None:
+            return []
+        user32 = api.user32
+        GWL_EXSTYLE = -20
+        WS_EX_TOOLWINDOW = 0x00000080
+        self_pid = os.getpid()
+        own_titles = {
+            "GameOCR",
+            "GameOCR Overlay",
+            "GameOCR — Kontrol Merkezi",
+            "GameOCR — Control Center",
+            "GameOCR - Ayarlar",
+            "GameOCR - Settings",
+            "GameOCR - Çeviri Geçmişi",
+            "GameOCR - Translation History",
+            "GameOCR - Program İzle / Pencere Seç",
+            "GameOCR - Watch Program / Select Window",
+        }
 
         def _enum_cb(hwnd: int, _lparam: int) -> bool:
-            if not user32.IsWindowVisible(hwnd):
+            h_int = int(hwnd)
+            if not user32.IsWindowVisible(h_int):
                 return True
-            length = user32.GetWindowTextLengthW(hwnd)
+            if user32.IsIconic(h_int):
+                return True
+            if is_win32_window_cloaked(h_int):
+                return True
+
+            pid = wintypes.DWORD(0)
+            user32.GetWindowThreadProcessId(h_int, ctypes.byref(pid))
+            if int(pid.value) == self_pid:
+                return True
+
+            ex_style = int(user32.GetWindowLongW(h_int, GWL_EXSTYLE))
+            if ex_style & WS_EX_TOOLWINDOW:
+                return True
+
+            cls_buf = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(h_int, cls_buf, 256)
+            cls_name = cls_buf.value.strip()
+            if cls_name.lower() in ("progman", "workerw"):
+                return True
+
+            length = user32.GetWindowTextLengthW(h_int)
             if length <= 0:
                 return True
             buf = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buf, length + 1)
+            user32.GetWindowTextW(h_int, buf, length + 1)
             title = buf.value.strip()
-            if not title or "GameOCR" in title:
+            if not title or title in own_titles:
                 return True
-            rect = RECT()
-            user32.GetWindowRect(hwnd, ctypes.byref(rect))
-            w = max(0, int(rect.right - rect.left))
-            h = max(0, int(rect.bottom - rect.top))
+
+            wrect = get_win32_window_rect(h_int)
+            if wrect is not None:
+                w, h = wrect[2], wrect[3]
+            else:
+                rect = api.RECT()
+                user32.GetWindowRect(h_int, ctypes.byref(rect))
+                w = max(0, int(rect.right - rect.left))
+                h = max(0, int(rect.bottom - rect.top))
             if w < 120 or h < 80:
                 return True
-            cls_buf = ctypes.create_unicode_buffer(256)
-            user32.GetClassNameW(hwnd, cls_buf, 256)
             entries.append(
-                WindowEntry(win_id=int(hwnd), title=title, wm_class=cls_buf.value, width=w, height=h)
+                WindowEntry(win_id=h_int, title=title, wm_class=cls_name, width=w, height=h)
             )
             return True
 
-        user32.EnumWindows(WNDENUMPROC(_enum_cb), 0)
+        cb_fn = api.WNDENUMPROC(_enum_cb)
+        user32.EnumWindows(cb_fn, 0)
     except Exception as exc:
         log_stage_exception(log, "list_win32_windows", exc)
     return entries
@@ -280,6 +316,7 @@ class WindowPickerDialog(QDialog):
         self.setWindowTitle(t("winpicker.title"))
         self.resize(620, 420)
         self.selected_window_id: int | None = None
+        self.selected_full_screen: bool = False
         self._all_entries: list[WindowEntry] = (
             entries if entries is not None else (list_win32_windows() if sys.platform == "win32" else list_x11_windows())
         )
@@ -335,6 +372,10 @@ class WindowPickerDialog(QDialog):
         btn_row.addWidget(self.status_lbl)
         btn_row.addStretch()
 
+        self.fullscreen_btn = QPushButton(t("winpicker.btn_fullscreen"))
+        self.fullscreen_btn.clicked.connect(self._accept_full_screen)
+        btn_row.addWidget(self.fullscreen_btn)
+
         self.select_btn = QPushButton(t("winpicker.btn_select"))
         self.select_btn.setStyleSheet(
             "QPushButton { background-color: #2e6db4; color: white; font-weight: bold; padding: 6px 16px; border-radius: 4px; }"
@@ -385,13 +426,20 @@ class WindowPickerDialog(QDialog):
     def _accept_selected(self) -> None:
         row = self.table.currentRow()
         if 0 <= row < len(self._filtered_entries):
+            self.selected_full_screen = False
             self.selected_window_id = self._filtered_entries[row].win_id
             self.accept()
+
+    def _accept_full_screen(self) -> None:
+        self.selected_window_id = 0
+        self.selected_full_screen = True
+        self.accept()
 
     def _on_click_pick(self) -> None:
         self.hide()
         wid = select_x11_window_by_click()
         if wid:
+            self.selected_full_screen = False
             self.selected_window_id = wid
             self.accept()
         else:
@@ -403,6 +451,7 @@ def trigger_window_selection(
     on_window_id_selected: Callable[[int], None],
     parent: QWidget | None = None,
     force_session_type: str | None = None,
+    on_full_screen: Callable[[], None] | None = None,
 ) -> str:
     """Oturum tipine (`XDG_SESSION_TYPE`) göre pencere seçimini tetikler.
 
@@ -423,7 +472,11 @@ def trigger_window_selection(
         return "wayland"
 
     dlg = WindowPickerDialog(parent=parent)
-    if dlg.exec() == int(QDialog.DialogCode.Accepted) and dlg.selected_window_id:
-        on_window_id_selected(dlg.selected_window_id)
+    if dlg.exec() == int(QDialog.DialogCode.Accepted):
+        if dlg.selected_full_screen:
+            if on_full_screen is not None:
+                on_full_screen()
+        elif dlg.selected_window_id and dlg.selected_window_id > 0:
+            on_window_id_selected(dlg.selected_window_id)
     return "win32" if st == "win32" else "x11"
 

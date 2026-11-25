@@ -1,8 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 
 datas = [('config.default.toml', '.')]
+if Path('gameocr/assets/icons').is_dir():
+    datas.append(('gameocr/assets/icons', 'gameocr/assets/icons'))
+_ico_file = Path('gameocr/assets/icons/gameocr.ico')
+_exe_icon = str(_ico_file) if _ico_file.is_file() else None
 binaries = []
 hiddenimports = ['gameocr', 'gameocr.__main__', 'gameocr.ocr_engine', 'gameocr.ui.overlay', 'gameocr.ui.settings_dialog', 'gameocr.ui.window_picker', 'gameocr.local_models', 'rapidocr_onnxruntime', 'onnxruntime', 'ctranslate2', 'sentencepiece', 'rapidfuzz', 'deepl', 'tomli_w', 'cv2', 'numpy', 'dbus_fast', 'dbus_fast.aio', 'Xlib', 'Xlib.ext.composite', 'mss', 'gameocr.capture.win32_backend']
 hiddenimports += collect_submodules('gameocr')
@@ -40,6 +45,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=True,
+    icon=_exe_icon,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

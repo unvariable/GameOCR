@@ -1,6 +1,6 @@
 # GameOCR – Gerçek Zamanlı Oyun Altyazı OCR ve Çeviri Katmanı
 
-**GameOCR**, Linux (KDE Plasma Wayland, GNOME, X11) ve Windows 10/11 (Beta) masaüstlerinde tam ekran oyun oynarken altyazıları belirlenen alandan (**ROI**) gerçek zamanlı yakalayan, **Çift Motorlu OCR (RapidOCR ONNX-CPU / PaddleOCR CUDA GPU)** ile okuyan, **DeepL API** veya **Çevrimdışı (Lokal CTranslate2)** motorla çeviren ve çeviriyi orijinal altyazının tam koordinat, boyut ve rengine hizalı (`exact_alignment`), tıklama geçirgen ve buzlu cam (`blur-behind`) efektli bir HUD olarak yansıtan açık kaynaklı bir araçtır.
+**GameOCR**, Linux (KDE Plasma Wayland, GNOME, X11) ve Windows 10/11 masaüstlerinde tam ekran/çerçevesiz oyun oynarken altyazıları belirlenen alandan (**ROI**) gerçek zamanlı yakalayan, **Çift Motorlu OCR (RapidOCR ONNX-CPU / PaddleOCR CUDA GPU)** ile okuyan, **DeepL API** veya **Çevrimdışı (Lokal CTranslate2)** motorla çeviren ve çeviriyi orijinal altyazının tam koordinat, boyut ve rengine hizalı (`exact_alignment`), tıklama geçirgen ve buzlu cam (`blur-behind`) efektli bir HUD olarak yansıtan açık kaynaklı bir araçtır.
 
 ---
 
@@ -22,9 +22,11 @@
 - **Daktilo (Typewriter) ve Öz-Yakalama (Self-Capture) Koruması:**
   - Harf harf akan diyaloglarda yazım tamamlanana (`settle_time`) kadar bekler; oyun arayüzü etiketlerini (`AUTO`, `SKIP`, `LOG`, `SPEAKING`) temizler ve overlay'in kendi çevirisini tekrar okumasını engeller.
 - **Çoklu Masaüstü ve Platform Desteği:**
+  - **Evrensel Kontrol Merkezi (`ControlWindow`) & Tek Örnek IPC:** Sistem tepsisi bulunmayan masaüstleri dahil tüm ortamlarda (`Ctrl+Alt+G` ile öne getirilen) kompakt kontrol penceresi ve ikinci açılışta mevcut pencereyi odaklayan tek-örnek IPC mekanizması.
+  - **Çoklu Çözünürlüklü Marka Logosu & Masaüstü Entegrasyonu:** Linux'ta `.DirIcon` / Hicolor tema ikonu ve `packaging/linux/install-desktop.sh` uygulama menüsü kurulumu; Windows'ta PE `RT_GROUP_ICON` ve `AppUserModelID` görev çubuğu kimliği.
   - **Wayland:** `xdg-desktop-portal` ScreenCast + PipeWire (`restore_token` ile pencere seçimini hatırlar) ve KWin kompozitör kısayolları.
   - **X11:** `XComposite` doğrudan pencere pixmap yakalama, dinamik Pencere Seçici (`WindowPickerDialog`) ve `_KDE_NET_WM_BLUR_BEHIND_REGION` buzlu cam efekti.
-  - **Windows 10/11 (Beta):** `Win32Backend` (`DXcam` + `MSS` otomatik yedek), `WDA_EXCLUDEFROMCAPTURE` öz-yakalama koruması, DWM Blur ve `RegisterHotKey`.
+  - **Windows 10/11 (Tam Sürüm):** `Win32Backend` (`PrintWindow` izole pencere yakalama, Z-order örtülme koruması, pencere-göreli ROI, birincil ekranda `DXcam` + `MSS` otomatik yedek), `WDA_EXCLUDEFROMCAPTURE` öz-yakalama koruması, standart şeffaf mod için `LWA_COLORKEY`, yüksek DPI & çoklu monitör desteği, DWM Blur ve `RegisterHotKey` (`MOD_NOREPEAT`).
 - **Kalıcı SQLite LRU Önbelleği & Çeviri Geçmişi:**
   - Tekrarlayan veya `%90+` benzer replikleri `0 ms` gecikme ve `0 API kotası` ile anında yanıtlar; geçmiş penceresinden arama ve kopyalama imkanı sunar.
 
@@ -39,8 +41,9 @@ GitHub **Releases** sayfasından işletim sisteminize uygun evrensel paketi indi
   chmod +x GameOCR-Universal-x86_64.AppImage
   ./GameOCR-Universal-x86_64.AppImage
   ```
-- **Windows 10/11 Beta (`GameOCR-Windows-Beta-cpu.zip`):**
-  Arşivi bir klasöre çıkartıp `build-windows-beta.bat` dosyasına çift tıklayın (Python 3.12 kurulu değilse otomatik kurar ve tek dosyalık `GameOCR-Universal-x64.exe` üretir).
+  *(Opsiyonel: Uygulama menüsüne ve simge temasına eklemek için `./packaging/linux/install-desktop.sh --exec /tam/yol/GameOCR-Universal-x86_64.AppImage` çalıştırabilirsiniz.)*
+- **Windows 10/11 (`GameOCR-Universal-x64.exe` veya `GameOCR-Windows-cpu.zip`):**
+  Doğrudan tek dosyalık `GameOCR-Universal-x64.exe` uygulamasını çalıştırın (veya kaynak/derleme arşivini çıkartıp `build-windows.bat` dosyasına çift tıklayarak Python 3.12 kurulumuyla yerel derleme yapın).
 
 ### Seçenek B: Kaynak Koddan Çalıştırma
 ```bash
@@ -70,7 +73,7 @@ uv run gameocr
 # NVIDIA GPU (CUDA 12.6 + cuDNN) hızlandırmalı AppImage üret (eksik CUDA kütüphanelerini otomatik indirir)
 ./build.sh --de kde --display hybrid --gpu nvidia --compiler pyinstaller
 
-# Windows 10/11 (Beta) taşınabilir paketini üret
+# Windows 10/11 taşınabilir paketini üret
 ./build.sh --platform windows --gpu cpu --compiler pyinstaller
 ```
 
@@ -88,10 +91,10 @@ Projeyi kendi GitHub hesabınızda yayınlamak ve sürüm (`Releases`) dosyalar�
 ./publish_github.sh --repo GameOCR --visibility public
 
 # 3. Kaynak kodunu yayınlayın VE derlenmiş Universal paketleri GitHub Releases'a yükleyin:
-./publish_github.sh --repo GameOCR --release v0.1.0
+./publish_github.sh --repo GameOCR --release v0.3.0
 ```
 
-> **Not:** `publish_github.sh --release v0.1.0` komutu, NVIDIA'nın ikili dağıtım kısıtlamalarına takılmamak ve 4+ GB yükleme yapmamak için yalnızca hafif ve açık lisanslı `GameOCR-Universal-x86_64.AppImage` ve `GameOCR-Windows-Beta-cpu.zip` dosyalarını (`SHA256SUMS.txt` ile birlikte) GitHub Releases'a yükler.
+> **Not:** `publish_github.sh --release v0.3.0` komutu, NVIDIA'nın ikili dağıtım kısıtlamalarına takılmamak ve 4+ GB yükleme yapmamak için yalnızca hafif ve açık lisanslı `GameOCR-Universal-x86_64.AppImage`, `GameOCR-Universal-x64.exe` ve `GameOCR-Windows-cpu.zip` dosyalarını (`SHA256SUMS.txt` ile birlikte) GitHub Releases'a yükler.
 
 ---
 
@@ -103,12 +106,13 @@ Projeyi kendi GitHub hesabınızda yayınlamak ve sürüm (`Releases`) dosyalar�
 | `Ctrl + Alt + S` | Altyazı Alanı Seç | Tam ekran interaktif ROI (Region of Interest) seçiciyi açar. |
 | `Ctrl + Alt + O` | Overlay Göster / Gizle | Altyazı katmanının görünürlüğünü açıp kapatır. |
 | `Ctrl + Alt + H` | Çeviri Geçmişi | Çevrilen repliklerin arama ve kopyalama penceresini açar. |
+| `Ctrl + Alt + G` | Kontrol Merkezi | Kontrol Merkezi penceresini öne getirir / açar. |
 
 ---
 
 ## 🧪 Testler
 
-GameOCR **78 kapsamlı birim testine** sahiptir. Tüm testleri çalıştırmak için:
+GameOCR kapsamlı otomatik birim testi paketine sahiptir. Tüm testleri çalıştırmak için:
 
 ```bash
 uv run pytest -v
@@ -124,7 +128,7 @@ Ayrıntılı mimari ve platform belgelerine `docs/` dizininden ulaşabilirsiniz:
   - [Wayland ve X11 Görüntü Sunucuları](./docs/tr/display_servers.md)
   - [Çevrimdışı Çeviri ve Çok Dilli OCR Paketleri](./docs/tr/local_translation.md)
   - [Derleme (`build.sh`) ve GitHub Yayınlama Kılavuzu](./docs/tr/building.md)
-  - [Windows 10/11 (Beta) Portu](./docs/tr/windows_port.md)
+  - [Windows 10/11 Mimarisi ve Özellikleri](./docs/tr/windows_port.md)
 - **English Documentation:** [docs/en/README.md](./docs/en/README.md)
 
 ---

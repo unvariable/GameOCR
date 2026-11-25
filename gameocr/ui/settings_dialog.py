@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Callable
+import threading
+from typing import Any, Callable
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QThread, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QFocusEvent, QKeyEvent, QKeySequence
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -50,6 +51,37 @@ from ..translator import Translator
 from .blur import set_kwin_blur_strength
 
 log = logging.getLogger(__name__)
+
+_DETACHED_WORKERS: set[QThread] = set()
+
+
+def _detach_running_worker(worker: QThread | None) -> None:
+    """Pencere kapanırken hala çalışan indirme iş parçacığını QDialog'dan ayırır (0xc0000409 önleme)."""
+    if worker is None or not worker.isRunning():
+        return
+    for sig_name in ("progressChanged", "downloadFinished"):
+        sig = getattr(worker, sig_name, None)
+        if sig is not None:
+            try:
+                sig.disconnect()
+            except Exception:
+                pass
+    try:
+        worker.setParent(None)
+    except Exception:
+        pass
+    _DETACHED_WORKERS.add(worker)
+
+    def _cleanup() -> None:
+        _DETACHED_WORKERS.discard(worker)
+        try:
+            worker.deleteLater()
+        except RuntimeError:
+            pass
+
+    worker.finished.connect(_cleanup)
+    if not worker.isRunning():
+        _cleanup()
 
 
 class HotkeyButton(QPushButton):
@@ -175,6 +207,8 @@ class HotkeyButton(QPushButton):
 
 
 class SettingsDialog(QDialog):
+    quotaFetched = pyqtSignal(int, object, bool)
+
     def __init__(
         self,
         cfg: Config,
@@ -200,6 +234,9 @@ class SettingsDialog(QDialog):
         self.on_select_window = on_select_window
         self._download_worker: ModelDownloadWorker | None = None
         self._ocr_download_worker: OcrModelDownloadWorker | None = None
+        self._quota_req_id: int = 0
+        self._is_closing: bool = False
+        self.quotaFetched.connect(self._apply_quota_result)
 
         set_language(self.cfg.general.ui_language)
 
@@ -340,6 +377,7 @@ class SettingsDialog(QDialog):
         # DeepL Kota Çubuğu
         self.quota_bar = QProgressBar()
         self.quota_bar.setRange(0, 100)
+        self.quota_bar.setValue(0)
         self.quota_label = QLabel(t("settings.quota_loading"))
         layout.addRow(t("settings.monthly_quota"), self.quota_bar)
         layout.addRow("", self.quota_label)
@@ -398,7 +436,7 @@ class SettingsDialog(QDialog):
         layout.addRow("", pack_prog_row)
 
         self._refresh_packs_table()
-        self._refresh_quota()
+        self._refresh_quota_async(persist=False)
         self.tabs.addTab(tab, t("tab.translator"))
 
     def _refresh_packs_table(self) -> None:
@@ -479,37 +517,71 @@ class SettingsDialog(QDialog):
         if self.translator is not None:
             self.translator.update_config(self.cfg.deepl)
         self.quota_label.setText(t("settings.quota_loading"))
-        QTimer.singleShot(100, self._refresh_quota)
+        QTimer.singleShot(50, lambda: self._refresh_quota_async(persist=True))
+
+    def _refresh_quota_async(self, persist: bool = True) -> None:
+        if self._is_closing:
+            return
+        self._quota_req_id += 1
+        req_id = self._quota_req_id
+        engine = getattr(self.cfg.general, "translation_engine", "auto_fallback")
+        translator = self.translator
+        if translator is None or engine == "local":
+            self._apply_quota_result(req_id, None, persist=False)
+            return
+        self.quota_label.setText(t("settings.quota_loading"))
+
+        def _worker() -> None:
+            usage_val: Any = None
+            try:
+                usage_val = translator.usage()
+            except Exception as exc:
+                log.warning("Ayarlar asenkron kota yenileme hatası: %s", exc)
+                usage_val = None
+            try:
+                self.quotaFetched.emit(req_id, usage_val, persist)
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=_worker, name="SettingsQuotaFetch", daemon=True).start()
+
+    def _apply_quota_result(self, req_id: int, usage: Any, persist: bool = True) -> None:
+        if self._is_closing or req_id != self._quota_req_id:
+            return
+        if usage:
+            count, limit = usage
+            percent = int((count / max(1, limit)) * 100)
+            remaining = max(0, limit - count)
+            avail_percent = max(0, 100 - percent)
+            self.quota_bar.setValue(min(100, percent))
+            self.quota_label.setText(
+                t(
+                    "settings.quota_info",
+                    remaining=remaining,
+                    limit=limit,
+                    percent=avail_percent,
+                    count=count,
+                )
+            )
+            if persist and self.cfg.deepl.auth_key:
+                save_config(self.cfg)
+                if self.on_applied:
+                    self.on_applied(self.cfg)
+            return
+        self.quota_bar.setValue(0)
+        self.quota_label.setText(t("settings.quota_failed"))
 
     def _refresh_quota(self) -> None:
+        self._quota_req_id += 1
+        req_id = self._quota_req_id
+        usage = None
         if self.translator is not None:
             try:
                 usage = self.translator.usage()
             except Exception as exc:
                 log.warning("Ayarlar kota yenileme hatası: %s", exc)
                 usage = None
-            if usage:
-                count, limit = usage
-                percent = int((count / max(1, limit)) * 100)
-                remaining = max(0, limit - count)
-                avail_percent = max(0, 100 - percent)
-                self.quota_bar.setValue(min(100, percent))
-                self.quota_label.setText(
-                    t(
-                        "settings.quota_info",
-                        remaining=remaining,
-                        limit=limit,
-                        percent=avail_percent,
-                        count=count,
-                    )
-                )
-                if self.cfg.deepl.auth_key:
-                    save_config(self.cfg)
-                    if self.on_applied:
-                        self.on_applied(self.cfg)
-                return
-        self.quota_bar.setValue(0)
-        self.quota_label.setText(t("settings.quota_failed"))
+        self._apply_quota_result(req_id, usage, persist=True)
 
     # ------------------------------------------------------------------ #
     # 2. Önbellek Sekmesi
@@ -595,26 +667,31 @@ class SettingsDialog(QDialog):
         sep_align.setFrameShadow(QFrame.Shadow.Sunken)
         layout.addRow(sep_align)
 
-        # KWin Blur Aç/Kapa
-        self.blur_check = QCheckBox(t("settings.blur_kwin"))
+        # Blur Aç/Kapa (Windows'ta DWM Blur, Linux'ta KWin Blur)
+        blur_label_key = "settings.blur_win32" if sys.platform == "win32" else "settings.blur_kwin"
+        self.blur_check = QCheckBox(t(blur_label_key))
         self.blur_check.setChecked(self.cfg.overlay.blur)
         layout.addRow(t("settings.bg_effect"), self.blur_check)
 
-        # Bulanıklık Yoğunluğu
-        blur_strength_row = QHBoxLayout()
-        self.blur_strength_slider = QSlider(Qt.Orientation.Horizontal)
+        # Bulanıklık Yoğunluğu (Yalnızca Linux KWin destekler)
+        self.blur_strength_slider = QSlider(Qt.Orientation.Horizontal, tab)
         self.blur_strength_slider.setRange(1, 15)
         self.blur_strength_slider.setValue(getattr(self.cfg.overlay, "blur_strength", 5))
-        self.blur_strength_label = QLabel(t("settings.blur_level", v=self.blur_strength_slider.value()))
+        self.blur_strength_label = QLabel(t("settings.blur_level", v=self.blur_strength_slider.value()), tab)
         self.blur_strength_slider.valueChanged.connect(
             lambda v: self.blur_strength_label.setText(t("settings.blur_level", v=v))
         )
         self.blur_strength_slider.sliderReleased.connect(
             lambda: set_kwin_blur_strength(self.blur_strength_slider.value())
         )
-        blur_strength_row.addWidget(self.blur_strength_slider)
-        blur_strength_row.addWidget(self.blur_strength_label)
-        layout.addRow(t("settings.blur_strength"), blur_strength_row)
+        if sys.platform != "win32":
+            blur_strength_row = QHBoxLayout()
+            blur_strength_row.addWidget(self.blur_strength_slider)
+            blur_strength_row.addWidget(self.blur_strength_label)
+            layout.addRow(t("settings.blur_strength"), blur_strength_row)
+        else:
+            self.blur_strength_slider.setVisible(False)
+            self.blur_strength_label.setVisible(False)
 
         # Opaklık Kaydırıcı (0 = Tamamen Şeffaf / Yalnızca Yazı)
         opacity_row = QHBoxLayout()
@@ -851,6 +928,7 @@ class SettingsDialog(QDialog):
 
         def _on_wid(wid: int) -> None:
             self.cfg.capture.x11_window_id = wid
+            self.cfg.capture.win32_hwnd = wid
             save_config(self.cfg)
             if self.on_applied:
                 self.on_applied(self.cfg)
@@ -898,7 +976,8 @@ class SettingsDialog(QDialog):
         w_panel, self.hotkey_show_panel_btn = _make_hotkey_row(self.cfg.hotkeys.show_panel)
         layout.addRow(t("settings.hotkey_show_panel"), w_panel)
 
-        info_lbl = QLabel(t("settings.hotkeys_info"))
+        info_key = "settings.hotkeys_info_win32" if sys.platform == "win32" else "settings.hotkeys_info"
+        info_lbl = QLabel(t(info_key))
         info_lbl.setStyleSheet("color: #8888aa; font-size: 11px;")
         layout.addRow("", info_lbl)
 
@@ -907,7 +986,7 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------ #
     # Kaydetme (Pencereyi kapatmaz!)
     # ------------------------------------------------------------------ #
-    def _save_changes(self) -> None:
+    def _save_changes(self, refresh_quota: bool = True) -> None:
         old_ui_lang = self.cfg.general.ui_language
         new_ui_lang = self.ui_lang_combo.currentData()
 
@@ -924,7 +1003,8 @@ class SettingsDialog(QDialog):
         self.cfg.deepl.formality = self.formality_combo.currentData() or "default"
         if self.translator is not None:
             self.translator.update_config(self.cfg.deepl, engine=self.cfg.general.translation_engine)
-            self._refresh_quota()
+            if refresh_quota:
+                self._refresh_quota_async(persist=False)
 
         self.cfg.cache.max_entries = self.max_cache_spin.value()
         if self.cache_store is not None:
@@ -982,7 +1062,12 @@ class SettingsDialog(QDialog):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Kullanıcı pencereyi çarpıdan veya Kapat butonundan kapattığında ayarları otomatik kaydeder."""
-        self._save_changes()
+        self._is_closing = True
+        self._save_changes(refresh_quota=False)
+        _detach_running_worker(self._download_worker)
+        self._download_worker = None
+        _detach_running_worker(self._ocr_download_worker)
+        self._ocr_download_worker = None
         super().closeEvent(event)
 
     def _reset_to_defaults(self) -> None:
@@ -1000,6 +1085,7 @@ class SettingsDialog(QDialog):
         saved_key = self.cfg.deepl.auth_key
         saved_roi = self.cfg.capture.roi
         saved_win = self.cfg.capture.x11_window_id
+        saved_win32 = self.cfg.capture.win32_hwnd
         saved_token = self.cfg.capture.portal_restore_token
         current_ui_lang = self.cfg.general.ui_language
 
@@ -1008,6 +1094,7 @@ class SettingsDialog(QDialog):
         default_cfg.deepl.auth_key = saved_key
         default_cfg.capture.roi = saved_roi
         default_cfg.capture.x11_window_id = saved_win
+        default_cfg.capture.win32_hwnd = saved_win32
         default_cfg.capture.portal_restore_token = saved_token
         default_cfg.general.ui_language = current_ui_lang
 

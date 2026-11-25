@@ -8,7 +8,7 @@ GameOCR is designed around a multi-threaded producer-consumer pipeline so that t
 
 ```mermaid
 flowchart LR
-    A["CaptureWorker<br/>(Portal / XComposite / MSS / Win32)"] -->|frame_q: max 1| B["OcrWorker<br/>(ChangeGate + PaddleOCR + Color Sampling)"]
+    A["CaptureWorker<br/>(Portal / XComposite / MSS / Win32)"] -->|frame_q: max 1| B["OcrWorker<br/>(ChangeGate + RapidOCR/PaddleOCR + Color Sampling)"]
     B -->|text_q: max 4<br/>OcrResult + TextStyleMeta| C["FilterWorker<br/>(TextFilter + SQLite LRU Cache)"]
     C -->|Cache Hit + TextStyleMeta| E["ui_q -> OverlayWindow"]
     C -->|translate_q: max 8<br/>TranslateJob + TextStyleMeta| D["TranslatorWorker<br/>(DeepL / Local CTranslate2)"]
@@ -52,4 +52,12 @@ When `logging.level = "DEBUG"` is active:
 - **`[TIMING]` Logs:** Execution times in milliseconds (`ms`) are logged for OCR inference, foreground color extraction, bounding-box layout calculation, and DeepL/local translation calls.
 - **`[IPC]` Queue Latency:** Every message carries a `created_at = time.perf_counter()` timestamp; worker threads log the exact queue wait time in milliseconds (`delay=X.XX ms`).
 - **Stage-Specific Tracebacks (`StageError`):** Visual alignment (`bbox_alignment`), color sampling (`color_sampling`), and local model loading (`local_model_load`) wrap exceptions with stage context via `log_stage_exception` and safely fall back so the HUD never crashes during gameplay.
+
+---
+
+## 3. Control Center, Portable Resources & Security Hardening
+
+- **`ControlWindow` & Single-Instance IPC (`gameocr/ui/control_window.py`, `gameocr/__main__.py`):** Universal control panel (`Ctrl+Alt+G`) for tray-less environments paired with deterministic `QLocalServer` single-instance activation.
+- **Bundle-Safe Resources (`gameocr/resources.py`, `gameocr/ui/icons.py`):** `_MEIPASS`-aware `resource_path()` for `config.default.toml`, multi-resolution `gameocr.ico` / PNG icons, and Windows `AppUserModelID`.
+- **Atomic File Replacement & Download Security (`gameocr/security.py`):** `atomic_replace()` with Windows `PermissionError` retries, `0o600` POSIX permissions, HTTPS enforcement, Zip Slip/Zip Bomb guards, and `_SecretRedactingFilter` log scrubbing.
 

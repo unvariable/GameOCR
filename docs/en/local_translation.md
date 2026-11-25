@@ -24,9 +24,9 @@ Configured in `config.toml` or via **Settings -> Translation**:
 ## 3. How Local Models Are Managed in Memory
 
 1. **Lazy Initialization:** Models are not loaded into RAM/VRAM when GameOCR starts if `deepl` mode is active. `LocalModelManager.translate()` loads the active language pair (`EN-TR` by default) only on first use.
-2. **Single Active Pair in RAM:** When switching language pairs (e.g., from `EN-TR` to `JA-TR`), `LocalModelManager` unloads the previous model or releases unused references via `unload_model()` + `gc.collect()`.
+2. **Single Active Pair in RAM:** When switching language pairs (e.g., from `EN-TR` to `JA-TR`), `LocalModelManager` unloads the previous model or releases unused references via `unload_model()` + `gc.collect()` (also freeing Windows file handles before package deletion).
 3. **CTranslate2 `int8` Quantization:** When CTranslate2 / Argos Translate models are loaded, `int8` compute quantization and 2 inter/intra threads are used to keep RAM usage under ~150–250 MB and CPU/GPU inference time around `5–18 ms` per subtitle line.
-4. **Built-in Offline Game Dialogue Engine:** For `EN-TR` (and installed packs), `LocalModelManager` also includes a zero-dependency phrase, idiom, suffix, and vocabulary translator so offline translation works immediately even before external `.argosmodel` archives are downloaded.
+4. **Built-in Offline Game Dialogue Engine & Safe Updates:** For `EN-TR` (and installed packs), `LocalModelManager` includes a zero-dependency phrase, idiom, suffix, and vocabulary translator; model/config writes use `atomic_replace()` and propagate `LocalModelError` cleanly if a download fails.
 
 ---
 

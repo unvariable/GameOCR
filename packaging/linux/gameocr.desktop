@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=GameOCR
+GenericName=Game Subtitle Translator
+Comment=Real-time Game Subtitle OCR and Translation Overlay
+Exec=gameocr
+Icon=gameocr
+Categories=Utility;Game;
+Terminal=false
+StartupNotify=false
+X-KDE-StartupNotify=false
+StartupWMClass=gameocr

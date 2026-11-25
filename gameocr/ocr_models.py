@@ -23,7 +23,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from .config import MODELS_DIR, PROJECT_ROOT
 from .logging_utils import StageError, log_stage_exception, timed_stage
-from .security import validate_https_url
+from .security import atomic_replace, validate_https_url
 
 log = logging.getLogger(__name__)
 
@@ -252,9 +252,14 @@ class OcrModelManager:
             "installed_ocr_packs": sorted(self._installed),
             "updated_at": time.time(),
         }
-        tmp = self.manifest_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        tmp.replace(self.manifest_path)
+        tmp = self.manifest_path.with_name(
+            f"{self.manifest_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        try:
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            atomic_replace(tmp, self.manifest_path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def _find_pack_files(self, pack: OcrPackInfo) -> tuple[Path, Path] | None:
         """Belirtilen OCR paketinin `(rec_model_path, rec_keys_path)` dosyalarını diskte arar."""
@@ -429,7 +434,7 @@ class OcrModelManager:
             with urllib.request.urlopen(req_dict, timeout=45) as resp:
                 dict_bytes = resp.read(16 * 1024 * 1024)
             tmp_dict.write_bytes(dict_bytes)
-            tmp_dict.replace(dest_dict)
+            atomic_replace(tmp_dict, dest_dict)
         finally:
             tmp_dict.unlink(missing_ok=True)
         if progress_cb:
@@ -456,7 +461,7 @@ class OcrModelManager:
                             pct = int(15 + (read_bytes / total_bytes) * 75)
                             progress_cb(min(90, max(15, pct)))
 
-            tmp_model.replace(dest_model)
+            atomic_replace(tmp_model, dest_model)
         finally:
             tmp_model.unlink(missing_ok=True)
         self._normalize_dict_for_onnx(dest_model, dest_dict)

@@ -43,6 +43,62 @@ def _get_lock_combos(X: any) -> list[int]:
     return list(set(combos))
 
 
+_WIN32_NAMED_VK: dict[str, int] = {
+    "SPACE": 0x20,
+    "TAB": 0x09,
+    "RETURN": 0x0D,
+    "ENTER": 0x0D,
+    "BACKSPACE": 0x08,
+    "BACK": 0x08,
+    "ESCAPE": 0x1B,
+    "ESC": 0x1B,
+    "INSERT": 0x2D,
+    "INS": 0x2D,
+    "DELETE": 0x2E,
+    "DEL": 0x2E,
+    "HOME": 0x24,
+    "END": 0x23,
+    "PGUP": 0x21,
+    "PAGEUP": 0x21,
+    "PAGE_UP": 0x21,
+    "PGDOWN": 0x22,
+    "PAGEDOWN": 0x22,
+    "PAGE_DOWN": 0x22,
+    "LEFT": 0x25,
+    "UP": 0x26,
+    "RIGHT": 0x27,
+    "DOWN": 0x28,
+    "PAUSE": 0x13,
+    "PRINT": 0x2C,
+    "PRINTSCREEN": 0x2C,
+    "SYSRQ": 0x2C,
+    "SCROLLLOCK": 0x91,
+    "-": 0xBD,
+    "MINUS": 0xBD,
+    "=": 0xBB,
+    "EQUAL": 0xBB,
+    "[": 0xDB,
+    "BRACKETLEFT": 0xDB,
+    "]": 0xDD,
+    "BRACKETRIGHT": 0xDD,
+    ";": 0xBA,
+    "SEMICOLON": 0xBA,
+    "'": 0xDE,
+    "APOSTROPHE": 0xDE,
+    ",": 0xBC,
+    "COMMA": 0xBC,
+    ".": 0xBE,
+    "PERIOD": 0xBE,
+    "/": 0xBF,
+    "SLASH": 0xBF,
+    "`": 0xC0,
+    "QUOTELEFT": 0xC0,
+    "GRAVE": 0xC0,
+    "\\": 0xDC,
+    "BACKSLASH": 0xDC,
+}
+
+
 def _parse_win32_shortcut(text: str) -> tuple[int, int] | None:
     """Windows `RegisterHotKey` için (fsModifiers, vk) çiftini ayrıştırır."""
     if not text or not text.strip():
@@ -71,6 +127,8 @@ def _parse_win32_shortcut(text: str) -> tuple[int, int] | None:
         return None
     if len(key_name) == 1 and key_name.isalnum():
         return mods, ord(key_name)
+    if key_name in _WIN32_NAMED_VK:
+        return mods, _WIN32_NAMED_VK[key_name]
     if key_name.startswith("F") and key_name[1:].isdigit():
         fn = int(key_name[1:])
         if 1 <= fn <= 24:
@@ -146,6 +204,7 @@ def _sync_kde_command_shortcuts(cfg: HotkeysConfig) -> None:
         "roi": ("Altyazı Alanı Seç", cfg.select_roi),
         "overlay": ("Overlay Göster / Gizle", cfg.toggle_overlay),
         "history": ("Çeviri Geçmişi", cfg.history),
+        "show_panel": ("Kontrol Merkezi", getattr(cfg, "show_panel", "")),
     }
 
     desktop_template = (
@@ -237,7 +296,19 @@ class GlobalHotkeyListener:
             import ctypes
             from ctypes import wintypes
 
-            user32 = ctypes.windll.user32
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
+            user32.RegisterHotKey.restype = wintypes.BOOL
+            user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.UnregisterHotKey.restype = wintypes.BOOL
+            user32.PeekMessageW.argtypes = [
+                ctypes.POINTER(wintypes.MSG),
+                wintypes.HWND,
+                wintypes.UINT,
+                wintypes.UINT,
+                wintypes.UINT,
+            ]
+            user32.PeekMessageW.restype = wintypes.BOOL
         except Exception as exc:
             log.debug("Win32 user32 yüklenemedi: %s", exc)
             return
@@ -247,15 +318,30 @@ class GlobalHotkeyListener:
             2: ("select_roi", self.cfg.select_roi),
             3: ("toggle_overlay", self.cfg.toggle_overlay),
             4: ("history", self.cfg.history),
+            5: ("show_panel", getattr(self.cfg, "show_panel", "")),
         }
+        MOD_NOREPEAT = 0x4000
         id_to_action: dict[int, str] = {}
         for hk_id, (act, sc) in action_map.items():
+            if not sc or not sc.strip():
+                continue
             parsed = _parse_win32_shortcut(sc)
             if parsed is None:
+                log.warning("Win32 kısayol ayrıştırılamadı (%s=%s)", act, sc)
                 continue
             mods, vk = parsed
-            if user32.RegisterHotKey(None, hk_id, mods, vk):
+            ctypes.set_last_error(0)
+            ok = bool(user32.RegisterHotKey(None, hk_id, mods | MOD_NOREPEAT, vk))
+            if not ok:
+                err = ctypes.get_last_error()
+                if err == 1004:
+                    ctypes.set_last_error(0)
+                    ok = bool(user32.RegisterHotKey(None, hk_id, mods, vk))
+                    err = ctypes.get_last_error()
+            if ok:
                 id_to_action[hk_id] = act
+            else:
+                log.warning("Win32 kısayol kaydedilemedi (%s=%s, err=%d)", act, sc, err)
 
         msg = wintypes.MSG()
         WM_HOTKEY = 0x0312
@@ -284,6 +370,12 @@ class GlobalHotkeyListener:
             except Exception:
                 pass
             self._udp_sock = None
+        cur = threading.current_thread()
+        for attr in ("_xlib_thread", "_udp_thread"):
+            t = getattr(self, attr, None)
+            if t is not None and t.is_alive() and t is not cur:
+                t.join(timeout=1.0)
+            setattr(self, attr, None)
         log.info("Global kısayollar dinleyicisi durduruldu")
 
     def update_config(self, cfg: HotkeysConfig) -> None:
@@ -352,6 +444,8 @@ class GlobalHotkeyListener:
                     "overlay": "toggle_overlay",
                     "toggle_overlay": "toggle_overlay",
                     "history": "history",
+                    "show_panel": "show_panel",
+                    "panel": "show_panel",
                 }
                 action = alias.get(raw_act)
                 if action:
@@ -386,6 +480,7 @@ class GlobalHotkeyListener:
             "select_roi": self.cfg.select_roi,
             "toggle_overlay": self.cfg.toggle_overlay,
             "history": self.cfg.history,
+            "show_panel": getattr(self.cfg, "show_panel", ""),
         }
 
         bindings: dict[tuple[int, int], str] = {}

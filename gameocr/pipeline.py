@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import sys
 import threading
 from typing import Any
 
@@ -72,6 +73,8 @@ class Pipeline:
             ui_q=self.ui_q,
             control_q=self.capture_ctrl_q,
             stop_event=self.stop_event,
+            ocr_ctrl_q=self.ocr_ctrl_q,
+            filter_ctrl_q=self.filter_ctrl_q,
         )
         self.ocr_worker = OcrWorker(
             ocr_engine=self.ocr_engine,
@@ -132,11 +135,15 @@ class Pipeline:
     def reselect_window(self, window_id: int | None = None) -> None:
         """İzlenen oyun penceresini canlı olarak değiştirir veya Wayland Portal seçimini tetikler."""
         if window_id is not None and window_id > 0:
-            self.cfg.capture.x11_window_id = int(window_id)
-            self.cfg.capture.win32_hwnd = int(window_id)
+            if sys.platform == "win32":
+                self.cfg.capture.win32_hwnd = int(window_id)
+                self.cfg.capture.x11_window_id = 0
+            else:
+                self.cfg.capture.x11_window_id = int(window_id)
         else:
             self.cfg.capture.portal_restore_token = ""
             self.cfg.capture.x11_window_id = 0
+            self.cfg.capture.win32_hwnd = 0
         save_config(self.cfg)
         for b in (self.backend, getattr(self.capture_worker, "backend", None)):
             if b is not None and hasattr(b, "cancel_pending"):
@@ -157,9 +164,14 @@ class Pipeline:
         self.update_config(self.cfg)
 
     def update_config(self, new_cfg: Config) -> None:
+        # SettingsDialog içindeki eski kopyanın canlı ROI ve pencere seçimini ezmesini önle
+        new_cfg.capture.roi = list(self.cfg.capture.roi)
+        new_cfg.capture.win32_hwnd = int(self.cfg.capture.win32_hwnd or 0)
+        new_cfg.capture.x11_window_id = int(self.cfg.capture.x11_window_id or 0)
+        new_cfg.capture.portal_restore_token = self.cfg.capture.portal_restore_token
+        self.backend.persist_state(new_cfg.capture)
         self.cfg = new_cfg
         save_config(self.cfg)
-        self.backend.persist_state(self.cfg.capture)
         self.translator.update_config(
             self.cfg.deepl,
             engine=getattr(self.cfg.general, "translation_engine", "deepl"),

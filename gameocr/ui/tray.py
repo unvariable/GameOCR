@@ -6,66 +6,18 @@ durum ipucu ve bildirim desteği sunar.
 from __future__ import annotations
 
 import logging
-import os
-from pathlib import Path
 from typing import Callable
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPixmap
-from PyQt6.QtWidgets import QMenu, QMessageBox, QSystemTrayIcon, QWidget
+from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtWidgets import QMenu, QSystemTrayIcon, QWidget
 
 from ..cache_store import CacheStore
 from ..config import Config
 from ..i18n import t
+from .icons import create_fallback_icon as create_default_tray_icon
+from .icons import get_tray_icon
 
 log = logging.getLogger(__name__)
-
-
-def create_default_tray_icon() -> QIcon:
-    """Tepsi için 64x64 boyutunda şık bir GameOCR vektörel rozet ikonu üretir."""
-    pix = QPixmap(64, 64)
-    pix.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(pix)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-    # Koyu mor / mavi degrade arka plan dairesi
-    painter.setBrush(QColor(40, 44, 70))
-    painter.setPen(QColor(0, 220, 150))
-    painter.drawRoundedRect(4, 4, 56, 56, 16, 16)
-
-    # "G" harfi
-    painter.setFont(QFont("sans-serif", 26, QFont.Weight.Bold))
-    painter.setPen(QColor(255, 255, 255))
-    painter.drawText(0, 0, 64, 64, Qt.AlignmentFlag.AlignCenter, "G")
-    painter.end()
-
-    return QIcon(pix)
-
-
-def get_tray_icon() -> QIcon:
-    """Tema ikonu (`gameocr`) yükler; yoksa kullanıcı ikon dizinine PNG yazıp fallback döner.
-
-    Cinnamon (`xapp-sn-watcher`) ve GNOME AppIndicator gibi StatusNotifierHost
-    bileşenleri `IconName` boş olduğunda ikonu göstermeyebildiği için tema ikonu
-    sağlamak tüm masaüstü ortamlarında görünürlüğü artırır.
-    """
-    fallback = create_default_tray_icon()
-    try:
-        data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-        icon_file = data_home / "icons" / "hicolor" / "64x64" / "apps" / "gameocr.png"
-        if not icon_file.exists():
-            icon_file.parent.mkdir(parents=True, exist_ok=True)
-            pix = fallback.pixmap(64, 64)
-            pix.save(str(icon_file), "PNG")
-        themed = QIcon.fromTheme("gameocr")
-        if not themed.isNull():
-            return themed
-        if icon_file.exists():
-            return QIcon(str(icon_file))
-    except Exception as exc:
-        log.debug("Tema ikonu hazırlanamadı, bellek içi ikon kullanılacak: %s", exc)
-    return fallback
 
 
 class TrayManager:
@@ -99,7 +51,9 @@ class TrayManager:
 
         self.backend_name = "auto"
         self.is_paused = False
+        self._overlay_hidden = False
         self.quota_info = ""
+        self._menu: QMenu | None = None
 
         self._build_menu()
         self._update_tooltip()
@@ -107,7 +61,9 @@ class TrayManager:
         self.tray.show()
 
     def _build_menu(self) -> None:
+        old_menu = getattr(self, "_menu", None)
         menu = QMenu()
+        self._menu = menu
 
         # Bilgi başlığı
         self.header_action = QAction(f"{t('app.name')} [{self.cfg.general.source_lang} → {self.cfg.general.target_lang}]", menu)
@@ -122,7 +78,7 @@ class TrayManager:
         menu.addSeparator()
 
         # Başlat / Duraklat
-        self.pause_action = QAction(t("tray.pause"), menu)
+        self.pause_action = QAction(t("tray.resume") if self.is_paused else t("tray.pause"), menu)
         self.pause_action.triggered.connect(self._handle_toggle_pause)
         menu.addAction(self.pause_action)
 
@@ -141,6 +97,9 @@ class TrayManager:
         # Overlay Görünürlüğü
         self.overlay_action = QAction(t("tray.toggle_overlay"), menu)
         self.overlay_action.setCheckable(True)
+        self.overlay_action.blockSignals(True)
+        self.overlay_action.setChecked(self._overlay_hidden)
+        self.overlay_action.blockSignals(False)
         self.overlay_action.toggled.connect(self._handle_toggle_overlay)
         menu.addAction(self.overlay_action)
 
@@ -167,6 +126,8 @@ class TrayManager:
         menu.addAction(quit_action)
 
         self.tray.setContextMenu(menu)
+        if old_menu is not None:
+            old_menu.deleteLater()
 
     def _handle_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason in (
@@ -183,7 +144,14 @@ class TrayManager:
             self.on_toggle_pause()
         self._update_tooltip()
 
+    def set_overlay_hidden(self, hidden: bool) -> None:
+        self._overlay_hidden = bool(hidden)
+        self.overlay_action.blockSignals(True)
+        self.overlay_action.setChecked(self._overlay_hidden)
+        self.overlay_action.blockSignals(False)
+
     def _handle_toggle_overlay(self, checked: bool) -> None:
+        self._overlay_hidden = bool(checked)
         if self.on_toggle_overlay:
             # checked=True ise overlay gizlenecek (visible=False)
             self.on_toggle_overlay(not checked)

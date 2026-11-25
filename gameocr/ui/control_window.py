@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 
 from ..config import Config
 from ..i18n import t
-from .tray import get_tray_icon
+from .icons import get_app_icon
 
 
 class ControlWindow(QWidget):
@@ -57,7 +57,7 @@ class ControlWindow(QWidget):
         self.backend_name = "auto"
 
         self.setWindowTitle(t("control.title"))
-        self.setWindowIcon(get_tray_icon())
+        self.setWindowIcon(get_app_icon())
         self.setMinimumWidth(360)
 
         self._build_ui()
@@ -175,11 +175,18 @@ class ControlWindow(QWidget):
         self.cfg = cfg
         self.refresh_labels()
 
-    def update_status(self, backend: str | None = None, paused: bool | None = None) -> None:
+    def update_status(
+        self,
+        backend: str | None = None,
+        paused: bool | None = None,
+        overlay_visible: bool | None = None,
+    ) -> None:
         if backend is not None:
             self.backend_name = backend
         if paused is not None:
             self.is_paused = paused
+        if overlay_visible is not None:
+            self.overlay_visible = bool(overlay_visible)
         self.refresh_labels()
 
     def bring_to_front(self) -> None:

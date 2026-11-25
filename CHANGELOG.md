@@ -4,6 +4,27 @@ Bu belge, GameOCR projesinde yapılan değişiklikleri, kök neden analizlerini,
 
 ---
 
+## [0.3.0] — 2026-11-25 (Windows 10/11 Tam Sürüm / Beta → Stable, Pencere İzolasyonu, Marka Logosu ve Kapsamlı Hata Giderme)
+
+### Öne Çıkanlar (Release Özeti)
+- **Windows 10/11 Tam Sürüm (Beta → Stable, 14 Hata Düzeltmesi):**
+  - **64-Bit Win32 `ctypes` Güvenliği (`win32_backend.py`, `blur.py`, `window_picker.py`, `icons.py`, `hotkeys.py`, `overlay.py`):** `SetWindowLongW`, `SetWindowPos`, `SetLayeredWindowAttributes`, `EnumWindows`, `EnumDisplayMonitors`, `GetMonitorInfoW`, `DwmEnableBlurBehindWindow`, `HWND_TOPMOST` ve `SetCurrentProcessExplicitAppUserModelID` için açık `argtypes`/`restype` prototipleri tanımlanarak 64-bit pointer/HWND kırpılma riski giderildi.
+  - **Deterministik Tek-Örnek IPC (`gameocr/__main__.py`):** Windows'ta `os.getpid()` tabanlı sunucu adı yerine `USERDOMAIN\USERNAME` üzerinden deterministik `SHA-256` sunucu adına geçildi; ikinci kez başlatılan örnek mevcut `ControlWindow` penceresini öne getirip güvenle kapanır.
+  - **Global Kısayollar (`gameocr/ui/hotkeys.py`):** `Ctrl+Alt+G` (`show_panel`) Win32, X11 ve KDE backend'lerine eklendi; ek sanal tuşlar (`_WIN32_NAMED_VK`), `MOD_NOREPEAT` + yedek kayıt, X11 `event_mask` kilidi düzeltmesi ve `stop()` içinde temiz thread `join()` eklendi.
+  - **Yüksek DPI, Çoklu Monitör ve Yakalama (`overlay.py`, `win32_backend.py`):** `EnumDisplayMonitors` + `QScreen` mantıksal/fiziksel koordinat dönüşümü (`win32_physical_rect_to_qt_logical`), `line_height_px / devicePixelRatio` font ölçeklemesi, `dxcam` yakalamasının yalnızca birincil monitörle sınırlandırılması ve `capture_win32_window_printwindow` ikinci denemede `GetWindowRect` kırpma düzeltmesi eklendi.
+  - **Tam Şeffaf Standart Mod (`LWA_COLORKEY`) & Windows ROI Seçici (`overlay.py`, `roi_selector.py`):** `exact_alignment = false` ve `opacity <= 0.01` için `LWA_COLORKEY | LWA_ALPHA` (`#010101` şeffaflık anahtarı) ve `SWP_FRAMECHANGED` uygulanarak koyu zemin üzerinde opak siyah kutu oluşumu giderildi; Windows `RoiSelectorWindow` koyu tuvali ve pencere-göreli ROI kırpması (`roi.window_unavailable` korumasıyla) düzeltildi.
+  - **Ayarlar, Dayanıklı I/O ve Kapanış (`settings_dialog.py`, `security.py`, `config.py`, `ocr_models.py`, `local_models.py`, `tray.py`):** Asenkron DeepL kota sorgusu (`_refresh_quota_async` + `quotaFetched`), pencere kapanırken `_detach_running_worker()` koruması, Windows DWM blur etiketi (`settings.blur_win32`) ve KWin kaydırıcısının gizlenmesi, `atomic_replace()` (`PermissionError` yeniden denemeli) + benzersiz `.tmp` temizliği, paket silmede `gc.collect()`, `TrayManager.update_config()` durum koruması ve temiz `shutdown()` uygulandı.
+  - **Paketleme (`build.sh`, `publish_github.sh`):** Windows betikleri `setup-windows.ps1`, `build-windows.bat`, `run-windows.bat` ve `GameOCR-Windows-<gpu>.zip` tam sürüm adlarına taşındı; boşluklu Windows kullanıcı adları ve opsiyonel `dxcam` kurulumu sertleştirildi.
+- **Windows Gerçek Pencere İzolasyonu (`PrintWindow`) & Z-Order Örtülme Koruması:**
+  - Pencere seçiminde `PrintWindow(PW_RENDERFULLCONTENT)` ile oyun penceresinin üzerine gelen pencerelerden izole kare yakalama ve pencere-göreli ROI desteği eklendi (`win32_backend.py`, `pipeline.py`, `workers.py`, `window_picker.py`).
+- **Çoklu Çözünürlüklü Şeffaf Marka Logosu & Masaüstü Entegrasyonu:**
+  - `gameocr/assets/icons/` altında `24..1024` PNG ve 5 katmanlı (`24, 32, 64, 128, 256`) `gameocr.ico` varlıkları, `_MEIPASS` uyumlu `gameocr/resources.py`, Windows `AppUserModelID` & PE `RT_GROUP_ICON` (`gameocr/ui/icons.py`), `tools/generate_icons.py` ve Linux için `packaging/linux/gameocr.desktop`, `install-desktop.sh`, `uninstall-desktop.sh` eklendi; AppImage içine `.DirIcon` ve Hicolor tema ikonları gömüldü.
+- **Doğrulama:**
+  - **118/118** birim testi geçti (`QT_QPA_PLATFORM=offscreen uv run pytest -v`).
+  - Windows 10 VM üzerinde derlenen `GameOCR-Universal-x64.exe` ile canlı masaüstü testleri (`WDA_EXCLUDEFROMCAPTURE`, tek örnek IPC, `Ctrl+Alt+G`, Ayarlar DWM blur, canlı lokal OCR + `exact_alignment` + `LWA_COLORKEY` şeffaflık) doğrulandı.
+
+---
+
 ## [0.2.2] — 2026-11-24 (Windows `deepl 2.0.0` Uyumluluğu, Ayarlar Çökmesi ve Overlay Çizim Düzeltmeleri)
 
 ### Öne Çıkanlar (Release Özeti)

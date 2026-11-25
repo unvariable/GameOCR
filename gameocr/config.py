@@ -20,14 +20,15 @@ from typing import Any
 
 import tomli_w
 
-from .security import harden_private_path
+from .resources import resource_path
+from .security import atomic_replace, harden_private_path
 from dotenv import load_dotenv
 
 log = logging.getLogger(__name__)
 
 _MEIPASS_DIR = getattr(sys, "_MEIPASS", None)
 PROJECT_ROOT = Path(_MEIPASS_DIR) if _MEIPASS_DIR else Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG_FILE = PROJECT_ROOT / "config.default.toml"
+DEFAULT_CONFIG_FILE = resource_path("config.default.toml")
 
 if sys.platform == "win32":
     CONFIG_DIR = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "GameOCR"
@@ -264,10 +265,13 @@ def save_config(cfg: Config, path: Path = CONFIG_FILE) -> None:
     with _save_lock:
         path.parent.mkdir(parents=True, exist_ok=True)
         harden_private_path(path.parent, is_dir=True)
-        tmp = path.with_suffix(".tmp")
-        with tmp.open("wb") as fh:
-            tomli_w.dump(cfg.to_dict(), fh)
-        harden_private_path(tmp, is_dir=False)
-        tmp.replace(path)  # atomik yazım: yarım dosya kalmaz
-        harden_private_path(path, is_dir=False)
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        try:
+            with tmp.open("wb") as fh:
+                tomli_w.dump(cfg.to_dict(), fh)
+            harden_private_path(tmp, is_dir=False)
+            atomic_replace(tmp, path)  # atomik yazım: yarım dosya kalmaz
+            harden_private_path(path, is_dir=False)
+        finally:
+            tmp.unlink(missing_ok=True)
     log.debug("Config kaydedildi: %s", path)

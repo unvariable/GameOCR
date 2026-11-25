@@ -116,6 +116,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings.match_text_color": "Orijinal metin rengini örnekle (Otsu / Medyan analizi)",
         "settings.bg_effect": "Arka Plan Efekti:",
         "settings.blur_kwin": "KWin Buzlu Cam Bulanıklaştırması (Blur-Behind)",
+        "settings.blur_win32": "Windows DWM Arka Plan Bulanıklaştırması (Blur-Behind)",
         "settings.blur_strength": "Bulanıklık Seviyesi:",
         "settings.blur_level": "Seviye {v}",
         "settings.panel_opacity": "Panel Opaklığı:",
@@ -160,8 +161,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "winpicker.col_class": "Uygulama",
         "winpicker.col_size": "Çözünürlük",
         "winpicker.btn_select": "✓ Bu Pencereyi İzle",
+        "winpicker.btn_fullscreen": "🖥️ Tüm Ekranı İzle (Monitör)",
         "winpicker.count_status": "{count} aktif pencere bulundu",
         "winpicker.selected_msg": "İzlenen oyun penceresi güncellendi (0x{wid:x}).",
+        "winpicker.fullscreen_msg": "Yakalama modu tüm ekran (monitör) olarak güncellendi.",
+        "capture.window_closed": "Win32 (Seçili pencere kapandı)",
 
         # Ayarlar - Kısayollar Sekmesi
         "settings.hotkeys_status": "Durum:",
@@ -172,6 +176,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings.hotkey_history": "Çeviri Geçmişi:",
         "settings.hotkey_show_panel": "Kontrol Merkezi / Arayüz:",
         "settings.hotkeys_info": "💡 Kısayollar tam ekran oyunlar dahil sistem genelinde çalışır.\nVarsayılan tuş kombinasyonları (Ctrl+Alt+...) Linux masaüstüyle çakışmaz.",
+        "settings.hotkeys_info_win32": "💡 Kısayollar çerçevesiz tam ekran (Borderless Windowed) oyunlar dahil Windows genelinde çalışır.\nVarsayılan tuş kombinasyonları (Ctrl+Alt+...) Windows sistem kısayollarıyla çakışmaz.",
         "hotkeys.record_prompt": "⌨ Tuşlara basın… (İptal: Esc)",
         "hotkeys.none": "— (Atanmadı) —",
         "hotkeys.clear": "Kısayolu Kaldır",
@@ -193,6 +198,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ROI Seçici
         "roi.hint": "Altyazı alanını seçmek için sürükleyin · Onayla: Enter / Çift Tık · İptal: Esc",
+        "roi.hint_window": "[{title}] penceresi içinde altyazı alanını sürükleyin · Onayla: Enter / Çift Tık · İptal: Esc",
+        "roi.window_unavailable": "Seçili pencere simge durumunda veya kapalı. Önce pencereyi görünür hale getirin veya Tüm Ekran moduna geçin.",
     },
 
     "en": {
@@ -291,6 +298,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings.match_text_color": "Sample original text color (Otsu / Median analysis)",
         "settings.bg_effect": "Background Effect:",
         "settings.blur_kwin": "KWin Frosted Glass Blur (Blur-Behind)",
+        "settings.blur_win32": "Windows DWM Background Blur (Blur-Behind)",
         "settings.blur_strength": "Blur Strength:",
         "settings.blur_level": "Level {v}",
         "settings.panel_opacity": "Panel Opacity:",
@@ -335,8 +343,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "winpicker.col_class": "Application",
         "winpicker.col_size": "Resolution",
         "winpicker.btn_select": "✓ Watch This Window",
+        "winpicker.btn_fullscreen": "🖥️ Watch Full Screen (Monitor)",
         "winpicker.count_status": "{count} active windows found",
         "winpicker.selected_msg": "Watched game window updated (0x{wid:x}).",
+        "winpicker.fullscreen_msg": "Capture mode switched to full screen (monitor).",
+        "capture.window_closed": "Win32 (Selected window closed)",
 
         # Settings - Hotkeys Tab
         "settings.hotkeys_status": "Status:",
@@ -347,6 +358,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings.hotkey_history": "Translation History:",
         "settings.hotkey_show_panel": "Control Center / UI:",
         "settings.hotkeys_info": "💡 Hotkeys work system-wide including fullscreen games.\nDefault combinations (Ctrl+Alt+...) do not conflict with Linux desktop.",
+        "settings.hotkeys_info_win32": "💡 Hotkeys work system-wide on Windows including Borderless Windowed games.\nDefault combinations (Ctrl+Alt+...) avoid Windows system shortcut conflicts.",
         "hotkeys.record_prompt": "⌨ Press keys… (Esc to cancel)",
         "hotkeys.none": "— (None) —",
         "hotkeys.clear": "Remove Shortcut",
@@ -368,6 +380,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ROI Selector
         "roi.hint": "Drag to select subtitle area · Confirm: Enter / Double Click · Cancel: Esc",
+        "roi.hint_window": "Drag subtitle area inside [{title}] · Confirm: Enter / Double Click · Cancel: Esc",
+        "roi.window_unavailable": "Selected window is minimized or closed. Restore the window first or switch to Full Screen mode.",
     },
 }
 

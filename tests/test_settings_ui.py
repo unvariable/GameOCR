@@ -133,4 +133,64 @@ def test_settings_dialog_survives_usage_exception(qapp) -> None:
     dialog.close()
 
 
+def test_settings_dialog_async_quota_close_detach_and_win32_labels(qapp, monkeypatch) -> None:
+    """Aşama 33: Yavaş DeepL kota sorgusu açılışı bloklamamalı, indirme thread'i varken
+    kapanışta 0xc0000409 önlenmeli ve Windows'ta DWM blur etiketi gösterilmelidir.
+    """
+    import threading
+    import time
+    from unittest.mock import MagicMock
+    from PyQt6.QtCore import QThread
+    from PyQt6.QtGui import QCloseEvent
+    from gameocr.config import Config
+    import gameocr.ui.settings_dialog as sd_mod
+    from gameocr.translator import Translator
+
+    gate = threading.Event()
+    cfg = Config()
+    cfg.deepl.auth_key = "dummy-key:fx"
+    mock_trans = MagicMock(spec=Translator)
+    mock_trans.cfg = cfg.deepl
+
+    def slow_usage():
+        gate.wait(timeout=1.5)
+        return (25000, 500000)
+
+    mock_trans.usage.side_effect = slow_usage
+
+    monkeypatch.setattr(sd_mod.sys, "platform", "win32")
+    t0 = time.monotonic()
+    dialog = sd_mod.SettingsDialog(cfg, translator=mock_trans)
+    elapsed = time.monotonic() - t0
+    assert elapsed < 0.4
+    assert "DWM" in dialog.blur_check.text()
+    assert "KWin" not in dialog.blur_check.text()
+    assert dialog.blur_strength_slider.isVisible() is False
+
+    gate.set()
+    deadline = time.monotonic() + 1.5
+    while dialog.quota_bar.value() != 5 and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert dialog.quota_bar.value() == 5
+
+    # Çalışan QThread varken dialog kapatılınca parent'tan ayrılıp çökmemeli
+    worker_stop = threading.Event()
+
+    class DummyWorker(QThread):
+        def run(self) -> None:
+            worker_stop.wait(timeout=1.0)
+
+    w = DummyWorker(dialog)
+    w.start()
+    dialog._ocr_download_worker = w  # type: ignore[assignment]
+    dialog.closeEvent(QCloseEvent())
+
+    assert w.parent() is None
+    assert dialog._ocr_download_worker is None
+    worker_stop.set()
+    w.wait(1500)
+    qapp.processEvents()
+
+
 

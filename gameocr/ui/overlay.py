@@ -50,40 +50,215 @@ log = logging.getLogger(__name__)
 
 def set_win32_topmost_clickthrough(hwnd: int) -> bool:
     """Windows üzerinde overlay penceresine HWND_TOPMOST ve WS_EX_TRANSPARENT bayraklarını uygular."""
-    if not hwnd:
+    if sys.platform != "win32" or not hwnd:
         return False
     try:
         import ctypes
 
-        user32 = getattr(ctypes, "windll", None)
-        if user32 is None or not hasattr(user32, "user32"):
+        from ..capture.win32_backend import _Win32Api
+
+        api = _Win32Api.get()
+        if api is None:
             return False
         GWL_EXSTYLE = -20
         WS_EX_LAYERED = 0x00080000
         WS_EX_TRANSPARENT = 0x00000020
         WS_EX_TOOLWINDOW = 0x00000080
         WS_EX_NOACTIVATE = 0x08000000
-        HWND_TOPMOST = -1
+        HWND_TOPMOST = ctypes.c_void_p(-1)
         SWP_NOMOVE = 0x0002
         SWP_NOSIZE = 0x0001
         SWP_NOACTIVATE = 0x0010
+        SWP_FRAMECHANGED = 0x0020
 
-        cur_style = user32.user32.GetWindowLongW(int(hwnd), GWL_EXSTYLE)
+        h_int = int(hwnd)
+        cur_style = int(api.user32.GetWindowLongW(h_int, GWL_EXSTYLE))
         new_style = cur_style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
-        user32.user32.SetWindowLongW(int(hwnd), GWL_EXSTYLE, new_style)
-        user32.user32.SetWindowPos(
-            int(hwnd), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+        api.user32.SetWindowLongW(h_int, GWL_EXSTYLE, new_style)
+        api.user32.SetWindowPos(
+            h_int,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
         )
         # SetWindowLongW çağrısı sonrası DWM yakalama gizleme bayrağını (WDA_EXCLUDEFROMCAPTURE = 0x11)
         # doğrudan pencerenin sahibi olan Qt ana iş parçacığında yenile (self-capture önleme):
         WDA_EXCLUDEFROMCAPTURE = 0x00000011
-        ok = bool(user32.user32.SetWindowDisplayAffinity(int(hwnd), WDA_EXCLUDEFROMCAPTURE))
+        ok = bool(api.user32.SetWindowDisplayAffinity(h_int, WDA_EXCLUDEFROMCAPTURE))
         if not ok:
-            log.warning("Win32 SetWindowDisplayAffinity başarısız (hwnd=0x%x)", hwnd)
+            log.warning("Win32 SetWindowDisplayAffinity başarısız (hwnd=0x%x)", h_int)
         return True
     except Exception as exc:
         log.debug("Win32 topmost/clickthrough uygulanamadı: %s", exc)
         return False
+
+
+def set_win32_layered_colorkey(hwnd: int, colorkey_bgr: int, alpha_byte: int) -> bool:
+    """Windows `SetLayeredWindowAttributes` ile belirtilen rengi (LWA_COLORKEY) tamamen saydamlaştırır."""
+    if sys.platform != "win32" or not hwnd:
+        return False
+    try:
+        from ..capture.win32_backend import _Win32Api
+
+        api = _Win32Api.get()
+        if api is None:
+            return False
+        LWA_COLORKEY = 0x00000001
+        LWA_ALPHA = 0x00000002
+        return bool(
+            api.user32.SetLayeredWindowAttributes(
+                int(hwnd),
+                int(colorkey_bgr),
+                max(0, min(255, int(alpha_byte))),
+                LWA_COLORKEY | LWA_ALPHA,
+            )
+        )
+    except Exception as exc:
+        log.debug("Win32 SetLayeredWindowAttributes uygulanamadı: %s", exc)
+        return False
+
+
+def _match_win32_monitors_to_screens() -> list[tuple[object, tuple[int, int, int, int]]]:
+    """Win32 fiziksel monitör dikdörtgenlerini Qt `QScreen` nesneleriyle eşleştirir."""
+    screens = QApplication.screens()
+    if not screens:
+        return []
+
+    win_mons: list[tuple[str, tuple[int, int, int, int]]] = []
+    if sys.platform == "win32":
+        try:
+            from ..capture.win32_backend import get_win32_monitors
+
+            win_mons = get_win32_monitors()
+        except Exception:
+            win_mons = []
+
+    if not win_mons:
+        pairs: list[tuple[object, tuple[int, int, int, int]]] = []
+        for scr in screens:
+            geo = scr.geometry()
+            dpr = max(1.0, float(scr.devicePixelRatio())) if sys.platform == "win32" else 1.0
+            pairs.append(
+                (
+                    scr,
+                    (
+                        int(round(geo.x() * dpr)),
+                        int(round(geo.y() * dpr)),
+                        max(1, int(round(geo.width() * dpr))),
+                        max(1, int(round(geo.height() * dpr))),
+                    ),
+                )
+            )
+        return pairs
+
+    matched: list[tuple[object, tuple[int, int, int, int]]] = []
+    used_screens: set[int] = set()
+    remaining_mons: list[tuple[str, tuple[int, int, int, int]]] = []
+
+    for dev_name, phys_rect in win_mons:
+        found_idx = None
+        for idx, scr in enumerate(screens):
+            if idx in used_screens:
+                continue
+            scr_name = scr.name() if callable(getattr(scr, "name", None)) else ""
+            if dev_name and scr_name and scr_name.strip().lower() == dev_name.strip().lower():
+                found_idx = idx
+                break
+        if found_idx is not None:
+            used_screens.add(found_idx)
+            matched.append((screens[found_idx], phys_rect))
+        else:
+            remaining_mons.append((dev_name, phys_rect))
+
+    still_remaining: list[tuple[str, tuple[int, int, int, int]]] = []
+    for dev_name, phys_rect in remaining_mons:
+        pw, ph = phys_rect[2], phys_rect[3]
+        found_idx = None
+        for idx, scr in enumerate(screens):
+            if idx in used_screens:
+                continue
+            geo = scr.geometry()
+            dpr = max(1.0, float(scr.devicePixelRatio()))
+            ew = int(round(geo.width() * dpr))
+            eh = int(round(geo.height() * dpr))
+            if abs(ew - pw) <= 2 and abs(eh - ph) <= 2:
+                found_idx = idx
+                break
+        if found_idx is not None:
+            used_screens.add(found_idx)
+            matched.append((screens[found_idx], phys_rect))
+        else:
+            still_remaining.append((dev_name, phys_rect))
+
+    avail_indices = [i for i in range(len(screens)) if i not in used_screens]
+    for (_dev_name, phys_rect), idx in zip(still_remaining, avail_indices):
+        matched.append((screens[idx], phys_rect))
+    return matched
+
+
+def pick_screen_for_physical_rect(
+    rect: tuple[int, int, int, int] | None,
+) -> tuple[object | None, tuple[int, int, int, int] | None]:
+    """Verilen fiziksel dikdörtgeni en çok kapsayan `(QScreen, mon_phys_rect)` çiftini döndürür."""
+    primary = QApplication.primaryScreen()
+    pairs = _match_win32_monitors_to_screens()
+    if not pairs:
+        return primary, None
+    if rect is None:
+        for scr, phys in pairs:
+            if scr is primary:
+                return scr, phys
+        return pairs[0]
+
+    rx, ry, rw, rh = rect
+    target_q = QRect(int(rx), int(ry), max(1, int(rw)), max(1, int(rh)))
+    best_pair = pairs[0]
+    best_area = -1
+    for scr, phys in pairs:
+        mx, my, mw, mh = phys
+        inter = QRect(mx, my, mw, mh).intersected(target_q)
+        area = max(0, inter.width()) * max(0, inter.height())
+        if area > best_area:
+            best_area = area
+            best_pair = (scr, phys)
+    if best_area <= 0:
+        # Kesişim yoksa en yakın monitör merkezini seç
+        tcx = rx + rw / 2.0
+        tcy = ry + rh / 2.0
+        best_pair = min(
+            pairs,
+            key=lambda p: ((p[1][0] + p[1][2] / 2.0 - tcx) ** 2 + (p[1][1] + p[1][3] / 2.0 - tcy) ** 2),
+        )
+    return best_pair
+
+
+def win32_physical_rect_to_qt_logical(
+    rect: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    """Çoklu monitör ve karışık DPI altında Win32 fiziksel koordinatlarını Qt mantıksal koordinatlarına çevirir."""
+    rx, ry, rw, rh = int(rect[0]), int(rect[1]), max(1, int(rect[2])), max(1, int(rect[3]))
+    if sys.platform != "win32":
+        return rx, ry, rw, rh
+
+    scr, mon_phys = pick_screen_for_physical_rect((rx, ry, rw, rh))
+    if scr is None:
+        return rx, ry, rw, rh
+
+    dpr = max(1.0, float(scr.devicePixelRatio()))
+    sgeo = scr.geometry()
+    if mon_phys is not None:
+        mx, my, _mw, _mh = mon_phys
+        lx = sgeo.x() + int(round((rx - mx) / dpr))
+        ly = sgeo.y() + int(round((ry - my) / dpr))
+    else:
+        lx = int(round(rx / dpr))
+        ly = int(round(ry / dpr))
+    lw = max(1, int(round(rw / dpr)))
+    lh = max(1, int(round(rh / dpr)))
+    return lx, ly, lw, lh
 
 
 def set_x11_always_on_top(win_id: int) -> None:
@@ -132,7 +307,7 @@ def set_x11_always_on_top(win_id: int) -> None:
 
 def ensure_kwin_rule() -> None:
     """KWin pencere kurallarına GameOCR için 'Keep Above (Force)' kuralı ekler."""
-    if not shutil.which("kwriteconfig6"):
+    if sys.platform == "win32" or not shutil.which("kwriteconfig6"):
         return
     try:
         subprocess.run(["kwriteconfig6", "--file", "kwinrulesrc", "--group", "1", "--key", "Description", "GameOCR Always on Top"], check=False)
@@ -175,6 +350,7 @@ class OverlayWindow(QWidget):
         self._last_blur_geo: tuple[int, int] = (0, 0)
         self._last_win32_mask_rect: tuple[int, int, int, int] | None = None
         self._last_win32_exact_mode: bool = False
+        self._win32_colorkey_active: bool = False
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -251,6 +427,15 @@ class OverlayWindow(QWidget):
 
     def _apply_win32_window_opacity(self, exact_mode: bool = False) -> None:
         base_alpha = max(0.0, min(1.0, float(self.cfg.opacity)))
+        use_colorkey = (not exact_mode) and (base_alpha <= 0.01)
+        self._win32_colorkey_active = use_colorkey
+        if use_colorkey:
+            alpha_byte = max(0, min(255, int(round(self._opacity * 255))))
+            # #010101 (COLORREF 0x00010101) piksellerini saydam yap; sadece yazı + #000000 gölge kalsın
+            if set_win32_layered_colorkey(int(self.winId()), 0x00010101, alpha_byte):
+                return
+            self.setWindowOpacity(max(0.0, min(1.0, self._opacity)))
+            return
         if exact_mode:
             target = max(base_alpha, 0.96) * self._opacity
         else:
@@ -321,6 +506,8 @@ class OverlayWindow(QWidget):
         super().showEvent(event)
         xid = int(self.winId())
         set_x11_always_on_top(xid)
+        if sys.platform == "win32":
+            self._apply_win32_window_opacity(exact_mode=self._last_win32_exact_mode)
         self._apply_blur()
 
     def show_status(self, text: str) -> None:
@@ -336,6 +523,8 @@ class OverlayWindow(QWidget):
         self.show()
         self.raise_()
         set_x11_always_on_top(int(self.winId()))
+        if sys.platform == "win32":
+            self._apply_win32_window_opacity(exact_mode=self._last_win32_exact_mode)
         self._apply_blur()
         self.update(self.rect())
 
@@ -362,13 +551,7 @@ class OverlayWindow(QWidget):
         if w <= 0 or h <= 0:
             return
         if sys.platform == "win32":
-            screen = QApplication.primaryScreen()
-            dpr = float(screen.devicePixelRatio()) if screen is not None else 1.0
-            if dpr > 1.01:
-                x = int(round(x / dpr))
-                y = int(round(y / dpr))
-                w = max(1, int(round(w / dpr)))
-                h = max(1, int(round(h / dpr)))
+            x, y, w, h = win32_physical_rect_to_qt_logical((x, y, w, h))
         if self._active_geometry == (x, y, w, h):
             return
         self._active_geometry = (x, y, w, h)
@@ -564,7 +747,12 @@ class OverlayWindow(QWidget):
                     if getattr(self.cfg, "match_font_size", True) and self._style_meta.line_height_px > 0:
                         min_px = max(8, int(self.cfg.font_min))
                         max_px = max(min_px, int(self.cfg.font_max) * 2)
-                        exact_px = max(min_px, min(max_px, int(self._style_meta.line_height_px)))
+                        raw_line_h = float(self._style_meta.line_height_px)
+                        if sys.platform == "win32":
+                            dpr = max(1.0, float(self.devicePixelRatioF()))
+                            if dpr > 1.01:
+                                raw_line_h = raw_line_h / dpr
+                        exact_px = max(min_px, min(max_px, int(round(raw_line_h))))
                         font.setPixelSize(exact_px)
 
                         # Eğer çevrilen metin sarıldığında (word-wrap) mevcut yüksekliğe sığmıyorsa:
@@ -693,7 +881,10 @@ class OverlayWindow(QWidget):
         alpha = 255 if sys.platform == "win32" else int(base_alpha * self._opacity * 255)
         bg_luma = 15.0
 
-        if alpha > 0:
+        if sys.platform == "win32" and mode == "standard" and base_alpha <= 0.01:
+            # Standart modda opaklık %0 ise #010101 LWA_COLORKEY pikselleri saydamlaşır; sadece metin görünür
+            painter.fillRect(self.rect(), QColor(1, 1, 1))
+        elif alpha > 0:
             if mode == "exact" and self._style_meta is not None:
                 # Tam Hizalama modunda alttaki orijinal İngilizce yazının arkadan görünmemesi (bleed-through olmaması)
                 # ve açık/koyu sayfa arka planıyla birebir bütünleşmesi için örneklenen bg_color_hex kullanılır.
@@ -760,6 +951,8 @@ class OverlayWindow(QWidget):
             )
             return
 
+        if sys.platform == "win32" and self._win32_colorkey_active and (text_color.red(), text_color.green(), text_color.blue()) == (1, 1, 1):
+            text_color = QColor(2, 2, 2)
         text_color.setAlpha(int(self._opacity * 255))
 
         # Gölge Çizimi (Yalnızca koyu arka planlarda okunabilirlik gölgesi çiz; açık sayfada siyah yazıyı kirletme)

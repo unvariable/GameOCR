@@ -19,9 +19,10 @@ Saf Wayland protokolünde istemci pencerelerin kendi mutlak `(X, Y)` ekran koord
 2. `WindowTransparentForInput` ile fare tıklamaları %100 oyuna geçer.
 3. KWin buzlu cam (blur-behind) atomu sorunsuz çalışır.
 
-## 2.3. Dinamik Pencere Seçimi ("Program İzle / Pencere Seç…")
+## 2.3. Dinamik Pencere Seçimi ("Program İzle / Pencere Seç…") ve Kontrol Merkezi
 
-Sistem tepsisinden veya **Ayarlar → Algılama ve OCR** sekmesinden **"🪟 Program İzle / Pencere Seç…"** butonuna basıldığında:
-- **Wayland Oturumunda:** Mevcut `portal_restore_token` sıfırlanır ve `xdg-desktop-portal` üzerinden masaüstü ortamının güvenli pencere/ekran seçicisi açılır.
-- **X11 Oturumunda:** Açık pencerelerin başlıklarını, uygulama sınıflarını (`WM_CLASS`), çözünürlüklerini ve XID kimliklerini listeleyen `WindowPickerDialog` açılır. Kullanıcı listeden arama yapıp çift tıklayabilir veya **"🎯 Ekranda Tıklayarak Seç"** butonuyla doğrudan oyun penceresinin üzerine tıklayabilir.
+- **Evrensel Kontrol Merkezi (`ControlWindow`, `Ctrl+Alt+G`) & `.desktop` İkonu:** Linux'ta `QIcon.fromTheme("gameocr")` + `setDesktopFileName("gameocr")` ile GNOME/Cinnamon/KDE sistem tepsisi ve görev çubuğu ikonları doğru eşlenir (`./packaging/linux/install-desktop.sh` ile menüye kurulabilir).
+- Sistem tepsisinden veya **Kontrol Merkezi / Ayarlar → Algılama ve OCR** sekmesinden **"🪟 Program İzle / Pencere Seç…"** butonuna basıldığında:
+  - **Wayland Oturumunda:** Mevcut `portal_restore_token` sıfırlanır ve `xdg-desktop-portal` üzerinden masaüstü ortamının güvenli pencere/ekran seçicisi açılır.
+  - **X11 Oturumunda:** Açık pencerelerin başlıklarını, uygulama sınıflarını (`WM_CLASS`), çözünürlüklerini ve XID kimliklerini listeleyen `WindowPickerDialog` açılır. Kullanıcı listeden arama yapıp çift tıklayabilir veya **"🎯 Ekranda Tıklayarak Seç"** butonuyla doğrudan oyun penceresinin üzerine tıklayabilir.
 

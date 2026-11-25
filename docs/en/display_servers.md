@@ -1,6 +1,6 @@
 # 🖥️ Wayland vs. X11 Display Server Architecture
 
-GameOCR runs on both **Wayland** and **X11** desktop environments on Linux (as well as Windows Beta) by automatically detecting `$XDG_SESSION_TYPE` and adapting its screen capture, window selection, blur-behind, and global hotkey backends.
+GameOCR runs on both **Wayland** and **X11** desktop environments on Linux (as well as Windows 10/11) by automatically detecting `$XDG_SESSION_TYPE` and adapting its screen capture, window selection, blur-behind, and global hotkey backends.
 
 ---
 
@@ -28,11 +28,13 @@ By setting `os.environ.setdefault("QT_QPA_PLATFORM", "xcb")` on Linux in `gameoc
 
 ---
 
-## 3. Dynamic Window Selection (`gameocr/ui/window_picker.py`)
+## 3. Dynamic Window Selection (`gameocr/ui/window_picker.py`) & Control Center
 
-Users can switch the watched game window at any time from:
-- **System Tray Menu:** `🎯 Watch Program / Select Window...`
-- **Settings Dialog -> Capture Tab:** `🎯 Watch Program / Select Window...`
+- **Universal Control Center (`ControlWindow`, `Ctrl+Alt+G`) & Hicolor Icons:** On Linux, `QIcon.fromTheme("gameocr")` paired with `setDesktopFileName("gameocr")` ensures proper tray/taskbar icons across GNOME, Cinnamon, XFCE, and KDE (`./packaging/linux/install-desktop.sh` registers desktop menu entries).
+- Users can switch the watched game window at any time from:
+  - **Control Center (`Ctrl+Alt+G`)**
+  - **System Tray Menu:** `🎯 Watch Program / Select Window...`
+  - **Settings Dialog -> Capture Tab:** `🎯 Watch Program / Select Window...`
 
 ### Behavior by Session Type:
 - **Wayland:** Sends `ControlKind.RESELECT_WINDOW` to `CaptureWorker`, which closes the active PipeWire stream and opens the system's native `xdg-desktop-portal` window/screen selector.

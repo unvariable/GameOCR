@@ -6,6 +6,8 @@ ve arka plan işlem boru hattını entegre eder.
 from __future__ import annotations
 
 import argparse
+import getpass
+import hashlib
 import locale
 import logging
 import os
@@ -43,17 +45,29 @@ from gameocr.messages import UiKind, UiMessage
 from gameocr.pipeline import Pipeline
 from gameocr.ui.control_window import ControlWindow
 from gameocr.ui.hotkeys import GlobalHotkeyListener
+from gameocr.ui.icons import (
+    LINUX_DESKTOP_FILE_NAME,
+    configure_windows_app_user_model_id,
+    get_app_icon,
+)
 from gameocr.ui.overlay import OverlayWindow
 from gameocr.ui.roi_selector import RoiSelectorWindow
 from gameocr.ui.settings_dialog import SettingsDialog
-from gameocr.ui.tray import TrayManager, get_tray_icon
+from gameocr.ui.tray import TrayManager
 from gameocr.ui.window_picker import trigger_window_selection
 
 log = logging.getLogger("gameocr")
 
 
 def _ipc_server_name() -> str:
-    uid = os.getuid() if hasattr(os, "getuid") else os.getpid()
+    if hasattr(os, "getuid"):
+        uid = str(os.getuid())
+    else:
+        user_id = (
+            f"{os.environ.get('USERDOMAIN', '')}\\"
+            f"{os.environ.get('USERNAME', '') or getpass.getuser()}"
+        ).strip("\\").lower()
+        uid = hashlib.sha256(user_id.encode("utf-8", errors="ignore")).hexdigest()[:16]
     return f"gameocr-control-v1-{uid}"
 
 
@@ -82,6 +96,7 @@ def main() -> int:
     cfg = load_config()
     if args.select_window:
         cfg.capture.x11_window_id = 0
+        cfg.capture.win32_hwnd = 0
         cfg.capture.portal_restore_token = ""
 
     setup_logging(args.log_level or cfg.general.log_level, log_dir=LOGS_DIR)
@@ -101,9 +116,13 @@ def main() -> int:
         except Exception:
             pass
 
+    configure_windows_app_user_model_id()
+
     app = QApplication(sys.argv)
     app.setApplicationName("GameOCR")
-    app.setWindowIcon(get_tray_icon())
+    if sys.platform != "win32":
+        app.setDesktopFileName(LINUX_DESKTOP_FILE_NAME)
+    app.setWindowIcon(get_app_icon())
     app.setQuitOnLastWindowClosed(False)
 
     # QApplication sistem yerel ayarını (örn. tr_TR.UTF-8) yüklediğinde LC_NUMERIC
@@ -142,7 +161,16 @@ def main() -> int:
         except Exception:
             pass
         try:
+            ipc_server.close()
+        except Exception:
+            pass
+        try:
             overlay.hide()
+        except Exception:
+            pass
+        try:
+            tray.tray.hide()
+            app.processEvents()
         except Exception:
             pass
         try:
@@ -206,15 +234,35 @@ def main() -> int:
                 pipeline.reselect_window(wid),
                 tray.show_notification("GameOCR", t("winpicker.selected_msg", wid=wid)),
             ),
+            on_full_screen=lambda: (
+                pipeline.reselect_window(0),
+                tray.show_notification("GameOCR", t("winpicker.fullscreen_msg")),
+            ),
         )
 
     def on_select_roi() -> None:
         log.info("Canlı ROI seçici açılıyor…")
+        backend = pipeline.backend
+        wid = int(getattr(backend, "window_id", 0) or 0)
+        if wid > 0:
+            src_geom = backend.source_geometry()
+            if src_geom is None:
+                tray.show_notification("GameOCR", t("roi.window_unavailable"))
+                return
+            mon_geom = None
+            src_label = str(getattr(backend, "_window_title", "") or "")
+        else:
+            src_geom = None
+            mon_geom = backend.source_geometry()
+            src_label = ""
         selector = RoiSelectorWindow(
             on_selected=lambda roi: (
                 pipeline.set_roi(roi),
-                tray.show_notification("GameOCR", "Yeni altyazı alanı (ROI) kaydedildi."),
+                tray.show_notification("GameOCR", t("tray.roi_saved")),
             ),
+            source_rect=src_geom,
+            source_label=src_label,
+            monitor_rect=mon_geom,
         )
         setattr(app, "_roi_selector", selector)
         selector.show()
@@ -269,9 +317,8 @@ def main() -> int:
             new_visible = visible
 
         overlay.set_user_visible(new_visible)
-        tray.overlay_action.blockSignals(True)
-        tray.overlay_action.setChecked(not new_visible)
-        tray.overlay_action.blockSignals(False)
+        tray.set_overlay_hidden(not new_visible)
+        control_window.update_status(overlay_visible=new_visible)
         log.info("Altyazı overlay görünürlüğü güncellendi: %s", "Açık" if new_visible else "Kapalı")
 
     # Evrensel Kontrol Merkezi penceresi (tüm masaüstü ortamlarında garanti erişim)

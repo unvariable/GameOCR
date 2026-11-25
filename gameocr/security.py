@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+import time
 import urllib.parse
 import zipfile
 from pathlib import Path
@@ -72,6 +73,22 @@ def safe_extract_zip(
             raise ValueError(f"Arşiv boyutu güvenlik sınırını aşıyor: {total_size} > {max_total_bytes}")
 
     zf.extractall(dest_root)
+
+
+def atomic_replace(src: Path, dst: Path, retries: int = 6, delay_s: float = 0.025) -> None:
+    """Windows Defender / dosya kilidi altında geçici PermissionError'a dayanıklı atomik dosya değişimi."""
+    last_exc: Exception | None = None
+    attempts = max(1, int(retries))
+    for i in range(attempts):
+        try:
+            src.replace(dst)
+            return
+        except PermissionError as exc:
+            last_exc = exc
+            if i + 1 < attempts:
+                time.sleep(delay_s)
+    if last_exc is not None:
+        raise last_exc
 
 
 def redact_secrets(text: str) -> str:

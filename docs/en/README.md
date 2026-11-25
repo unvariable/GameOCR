@@ -12,8 +12,8 @@ Welcome to the architectural, operational, and developer documentation for **Gam
    - How `LocalModelManager` manages CTranslate2 / Argos Translate models in memory, why only `EN-TR` comes pre-installed by default, and how `ModelDownloadWorker(QThread)` downloads language packs without freezing the UI.
 4. [**Smart Interactive Build Script (`building.md`)**](building.md)
    - How to compile standalone executables using `./build.sh` with interactive wizard prompts or CLI flags (`--de`, `--display`, `--gpu`, `--compiler`).
-5. [**Windows Port (Beta) & Limitations (`windows_port.md`)**](windows_port.md)
-   - How `Win32Backend`, `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, `DwmEnableBlurBehindWindow`, and `RegisterHotKey` work on Windows, along with known Beta limitations.
+5. [**Windows 10/11 Architecture & Platform Notes (`windows_port.md`)**](windows_port.md)
+   - How `Win32Backend`, `PrintWindow` isolation, `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, `DwmEnableBlurBehindWindow`, high-DPI/multi-monitor scaling, and `RegisterHotKey` work on Windows.
 
 ---
 

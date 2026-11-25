@@ -17,6 +17,7 @@ from rapidfuzz import fuzz
 from .cache_store import CacheStore
 from .capture.base import CaptureBackend, OverlayHandle, roi_to_screen, session_type
 from .config import Config, PreprocessConfig, save_config
+from .i18n import t
 from .messages import (
     Control,
     ControlKind,
@@ -148,6 +149,8 @@ class CaptureWorker(threading.Thread):
         ui_q: queue.Queue[UiMessage],
         control_q: queue.Queue[Control],
         stop_event: threading.Event,
+        ocr_ctrl_q: queue.Queue[Control] | None = None,
+        filter_ctrl_q: queue.Queue[Control] | None = None,
     ) -> None:
         super().__init__(name="CaptureWorker", daemon=True)
         self.backend = backend
@@ -156,7 +159,17 @@ class CaptureWorker(threading.Thread):
         self.ui_q = ui_q
         self.control_q = control_q
         self.stop_event = stop_event
+        self.ocr_ctrl_q = ocr_ctrl_q
+        self.filter_ctrl_q = filter_ctrl_q
         self.is_paused = False
+        self._source_inactive = False
+        self._notified_window_closed = False
+
+    def _reset_downstream(self) -> None:
+        if self.ocr_ctrl_q is not None:
+            self.ocr_ctrl_q.put(Control(ControlKind.RESET_STATE))
+        if self.filter_ctrl_q is not None:
+            self.filter_ctrl_q.put(Control(ControlKind.RESET_STATE))
 
     def run(self) -> None:
         log.info("CaptureWorker başladı (backend=%s)", self.backend.name)
@@ -211,10 +224,13 @@ class CaptureWorker(threading.Thread):
                                 wid = int(ctrl.payload)
                                 if sys.platform == "win32":
                                     self.cfg.capture.win32_hwnd = wid
+                                    self.cfg.capture.x11_window_id = 0
                                     if hasattr(self.backend, "window_id"):
                                         self.backend.window_id = wid
                                     if hasattr(self.backend, "hwnd"):
                                         self.backend.hwnd = wid
+                                    if hasattr(self.backend, "_window_closed"):
+                                        self.backend._window_closed = False
                                 else:
                                     from .capture.xcomposite_backend import XCompositeBackend
                                     if not isinstance(self.backend, XCompositeBackend):
@@ -226,8 +242,14 @@ class CaptureWorker(threading.Thread):
                                     if not isinstance(self.backend, PortalBackend):
                                         self.backend = PortalBackend(self.cfg.capture)
                                 self.backend.forget_source()
+                                self.cfg.capture.win32_hwnd = 0
+                                self.cfg.capture.x11_window_id = 0
                             self.backend.open()
                             backend_ready = True
+                            self._source_inactive = False
+                            self._notified_window_closed = False
+                            self.ui_q.put(UiMessage(UiKind.CLEAR))
+                            self._reset_downstream()
                             self.backend.persist_state(self.cfg.capture)
                             save_config(self.cfg)
                             self.ui_q.put(UiMessage(UiKind.BACKEND, text=self.backend.name))
@@ -254,9 +276,9 @@ class CaptureWorker(threading.Thread):
             t0 = time.monotonic()
 
             try:
+                geom = self.backend.source_geometry()
                 # Periyodik geometri güncellemesi (ekran/pencere konumu)
                 if t0 - last_geom_check >= 1.0:
-                    geom = self.backend.source_geometry()
                     if geom:
                         screen_roi = roi_to_screen(geom, self.cfg.capture.roi)
                         self.ui_q.put(UiMessage(UiKind.GEOMETRY, data=screen_roi))
@@ -265,7 +287,26 @@ class CaptureWorker(threading.Thread):
                 # ROI karesini yakala
                 img = self.backend.grab_roi(self.cfg.capture.roi)
                 if img is not None and img.size > 0:
+                    if self._source_inactive:
+                        self._source_inactive = False
+                        self._notified_window_closed = False
+                        if geom:
+                            self.ui_q.put(
+                                UiMessage(UiKind.GEOMETRY, data=roi_to_screen(geom, self.cfg.capture.roi))
+                            )
                     _put_drop_oldest(self.frame_q, Frame(image=img))
+                elif getattr(self.backend, "window_id", 0) > 0:
+                    if not self._source_inactive:
+                        self._source_inactive = True
+                        self.ui_q.put(UiMessage(UiKind.CLEAR))
+                        self._reset_downstream()
+                    if (
+                        hasattr(self.backend, "is_window_closed")
+                        and self.backend.is_window_closed()
+                        and not self._notified_window_closed
+                    ):
+                        self._notified_window_closed = True
+                        self.ui_q.put(UiMessage(UiKind.BACKEND, text=t("capture.window_closed")))
             except Exception as exc:
                 log.debug("Kare yakalama hatası: %s", exc)
 
@@ -333,6 +374,14 @@ class OcrWorker(threading.Thread):
                         self.change_gate.reset()
                         if hasattr(self.ocr_engine, "update_config"):
                             self.ocr_engine.update_config(self.cfg.ocr, self.cfg.general.source_lang)
+                    elif ctrl.kind == ControlKind.RESET_STATE:
+                        self.change_gate.reset()
+                        self._last_had_text = False
+                        self._last_text = ""
+                        self._last_conf = 0.0
+                        self._last_style_meta = None
+                        self._empty_burst = 0
+                        self._static_ticks = 0
                 except queue.Empty:
                     break
 
@@ -457,6 +506,9 @@ class FilterWorker(threading.Thread):
                         self.cfg = ctrl.payload
                         self.filter.cfg = self.cfg.filter
                         self.filter.reset()
+                    elif ctrl.kind == ControlKind.RESET_STATE:
+                        self.filter.reset()
+                        self._latest_style_meta = None
                 except queue.Empty:
                     break
 

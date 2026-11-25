@@ -8,8 +8,8 @@ GameOCR, grafik arayüzde (PyQt6 ana thread) hiçbir kare düşüşü veya donma
    - Seçilen yakalama kaynağından (`PortalBackend`, `XCompositeBackend`, `MssBackend` veya `Win32Backend`) hedef FPS hızında (varsayılan 8 FPS) yalnızca seçilen altyazı bölgesini (`ROI`) yakalar.
    - Kuyruk boyutu `1` olduğu için OCR meşgulse eski kare otomatik düşürülür (`_put_drop_oldest`); böylece ekranda asla gecikmiş altyazı işlenmez.
 2. **`OcrWorker` (`text_q`, `maxsize=4`):**
-   - **`ChangeGate`:** Kareyi `64px` genişliğe küçülterek bir önceki kareyle ortalama piksel farkını ölçer. Fark `change_threshold` (%0.4) altındaysa pahalı GPU OCR çağrısını tamamen atlar ve metnin durağanlaştığını (`is_stable=True`) bildirir.
-   - **PaddleOCR Çıkarımı ve `TextStyleMeta`:** Kare değiştiğinde `OcrEngine.recognize_with_meta()` hem metni okur hem de orijinal BGR kareden görsel stil metaverisini (`TextStyleMeta`) üretir.
+   - **`ChangeGate`:** Kareyi `64px` genişliğe küçülterek bir önceki kareyle ortalama piksel farkını ölçer. Fark `change_threshold` (%0.4) altındaysa pahalı OCR çağrısını tamamen atlar ve metnin durağanlaştığını (`is_stable=True`) bildirir.
+   - **Çift Motorlu OCR (`RapidOcrEngine` / `PaddleCudaEngine`) ve `TextStyleMeta`:** Kare değiştiğinde `OcrEngine.recognize_with_meta()` seçili motorla (ONNX-CPU veya CUDA GPU) metni okur ve orijinal BGR kareden görsel stil metaverisini (`TextStyleMeta`) üretir.
 3. **`FilterWorker` (`translate_q`, `maxsize=8`):**
    - Oyun arayüzü etiketlerini (`AUTO`, `SKIP`, `LOG`, `SPEAKING`) temizler.
    - **Daktilo (Typewriter) Koruması:** Harf harf akan altyazılarda yazım durulana (`settle_time`) veya cümle sonu noktalama işareti (`.`, `!`, `?`, `…`, `」`) görülene kadar çeviri isteği göndermez.
@@ -46,5 +46,13 @@ GameOCR, grafik arayüzde (PyQt6 ana thread) hiçbir kare düşüşü veya donma
 - `log_level = "DEBUG"` seçildiğinde:
   - Tüm kritik aşamalar (`color_sampling`, `bbox_alignment`, `ocr_predict`, `local_translate`, `paint_exact_overlay`) `timed_stage` ile milisaniye (`ms`) cinsinden ölçülür.
   - Thread kuyrukları (`frame_q`, `text_q`, `translate_q`) arasındaki mesaj gecikmeleri (`[IPC]`) loglanır.
-  - Herhangi bir aşamada hata oluşursa `StageError` ve `log_stage_exception` hatanın tam olarak hangi aşamada ve hangi parametrelerle (`bbox_rel`, `shape` vb.) gerçekleştiğini `~/.local/share/gameocr/logs/gameocr.log` dosyasına kaydeder ve güvenli geri dönüş (standart panel) uygular.
+  - Herhangi bir aşamada hata oluşursa `StageError` ve `log_stage_exception` hatanın tam olarak hangi aşamada ve hangi parametrelerle (`bbox_rel`, `shape` vb.) gerçekleştiğini log dosyasına kaydeder ve güvenli geri dönüş (standart panel) uygular.
+
+---
+
+## 1.4. Evrensel Kontrol Merkezi, Kaynak Çözümleme ve Güvenli I/O
+
+- **`ControlWindow` & Tek Örnek IPC (`gameocr/ui/control_window.py`, `gameocr/__main__.py`):** Sistem tepsisi olmayan ortamlarda dahi `Ctrl+Alt+G` ile öne getirilebilen kompakt kontrol paneli ve deterministik `QLocalServer` tek-örnek yönlendirmesi.
+- **Taşınabilir Kaynak & İkon Çözümleme (`gameocr/resources.py`, `gameocr/ui/icons.py`):** Hem kaynak ağaçta hem PyInstaller `_MEIPASS` paketlerinde çalışan `resource_path()` ve çoklu çözünürlüklü uygulama ikonları.
+- **Güvenli Atomik Yazım (`gameocr/security.py`):** `atomic_replace()` (Windows dosya kilidi için yeniden denemeli), `0o600` POSIX dosya izinleri, `https://` + Zip Slip/Zip Bomb koruması ve log gizli bilgi maskeleme (`_SecretRedactingFilter`).
 

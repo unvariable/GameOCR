@@ -9,7 +9,7 @@
 #      (rapidocr-onnxruntime + CPUExecutionProvider, CUDA/Paddle ağırlıklarından arındırılmış)
 #   2) Opsiyonel Özel GPU Sürümü (--gpu nvidia): GameOCR_nvidia-x86_64.AppImage
 #      (CUDA 12.6 + cuDNN + PaddleOCR GPU + TensorRT desteği gömülü)
-# veya otomatik Python 3.12 kuruculu Windows 10/11 (Beta) paketine dönüştürür.
+# veya otomatik Python 3.12 kuruculu Windows 10/11 paketine dönüştürür.
 # =============================================================================
 set -euo pipefail
 
@@ -40,7 +40,7 @@ Kullanım: ./build.sh [SEÇENEKLER]
 
 Seçenekler:
   --platform <linux|windows>             Hedef işletim sistemi (varsayılan: linux)
-  --de <kde|gnome|xfce|other|windows>    Masaüstü ortamı veya Windows (Beta)
+  --de <kde|gnome|xfce|other|windows>    Masaüstü ortamı veya Windows 10/11
   --display <wayland|x11|hybrid|win32>   Görüntü sunucusu
   --gpu <nvidia|amd|cpu|dual>            GPU üreticisi / hızlandırma hedefi (dual = her iki AppImage sürümü)
   --compiler <pyinstaller|nuitka>        Derleyici aracı
@@ -70,7 +70,7 @@ if [[ "${PLATFORM_CHOICE,,}" == "windows" || "${PLATFORM_CHOICE,,}" == "win32" ]
 fi
 
 echo -e "${CYAN}${BOLD}=================================================================${NC}"
-echo -e "${CYAN}${BOLD}   GameOCR — Akıllı Standalone Linux & Windows (Beta) Derleyici  ${NC}"
+echo -e "${CYAN}${BOLD}   GameOCR — Akıllı Standalone Linux & Windows Derleyici        ${NC}"
 echo -e "${CYAN}${BOLD}=================================================================${NC}"
 
 # 1. Masaüstü Ortamı / Platform Seçimi
@@ -80,7 +80,7 @@ if [[ -z "$DE_CHOICE" ]]; then
     echo "   2) GNOME (Mutter + AppIndicator + PipeWire Portal optimizasyonu)"
     echo "   3) XFCE / LXQt / MATE (Hafif X11 kompozitör optimizasyonu)"
     echo "   4) Diğer Linux / Evrensel (Tüm masaüstü ortamları)"
-    echo "   5) Windows 10/11 (Beta — Otomatik Python 3.12 Kurulumu + Win32 DWM Blur + .exe)"
+    echo "   5) Windows 10/11 (Otomatik Python 3.12 Kurulumu + Win32 DWM Blur + .exe)"
     read -rp "Seçiminiz [1-5, varsayılan: 1]: " de_input
     case "${de_input:-1}" in
         1|kde|KDE) DE_CHOICE="kde"; PLATFORM_CHOICE="linux" ;;
@@ -108,7 +108,7 @@ if [[ -z "$DISPLAY_CHOICE" ]]; then
     echo "   1) Wayland (xdg-desktop-portal + PipeWire + XWayland XCB)"
     echo "   2) X11 (XComposite + Xlib doğrudan pencere yakalama)"
     echo "   3) Hibrit / Her İkisi (Wayland + X11 tam paket)"
-    echo "   4) Win32 / DWM (Windows 10/11 Beta yakalama katmanı)"
+    echo "   4) Win32 / DWM (Windows 10/11 yakalama katmanı)"
     read -rp "Seçiminiz [1-4, varsayılan: 3]: " disp_input
     case "${disp_input:-3}" in
         1|wayland) DISPLAY_CHOICE="wayland" ;;
@@ -213,7 +213,7 @@ elif [[ "$DE_CHOICE" == "gnome" ]]; then
 elif [[ "$DE_CHOICE" == "xfce" ]]; then
     ENV_FLAGS+=("GAMEOCR_DE_PROFILE=xfce")
 elif [[ "$DE_CHOICE" == "windows" ]]; then
-    ENV_FLAGS+=("GAMEOCR_DE_PROFILE=windows_beta")
+    ENV_FLAGS+=("GAMEOCR_DE_PROFILE=windows")
 fi
 
 # Görüntü sunucusuna özel modül dahil etme / dışlama
@@ -378,7 +378,7 @@ DIST_DIR="$PROJECT_DIR/dist/gameocr-${DE_CHOICE}-${DISPLAY_CHOICE}-${GPU_CHOICE}
 BUILD_DIR="$PROJECT_DIR/build/${DE_CHOICE}-${DISPLAY_CHOICE}-${GPU_CHOICE}"
 
 # =============================================================================
-# AŞAMA 11: Windows 10/11 (Beta) Paketleme ve Otomatik Python 3.12 Kurucu Üretimi
+# Windows 10/11 Paketleme ve Otomatik Python 3.12 Kurucu Üretimi
 # =============================================================================
 if [[ "$PLATFORM_CHOICE" == "windows" ]]; then
     rm -rf "$DIST_DIR"
@@ -415,41 +415,41 @@ if [[ "$PLATFORM_CHOICE" == "windows" ]]; then
         WIN_PYI_OCR_FLAGS="--collect-all rapidocr_onnxruntime --collect-all onnxruntime --exclude-module paddle --exclude-module paddleocr --exclude-module paddlex"
     fi
 
-    WIN_PS1="$DIST_DIR/setup-windows-beta.ps1"
+    WIN_PS1="$DIST_DIR/setup-windows.ps1"
     cat > "$WIN_PS1" <<EOF
 # =============================================================================
-# GameOCR Windows 10/11 (Beta) - Otomatik Python 3.12 Kurulum ve TEK EXE Derleyici
+# GameOCR Windows 10/11 - Otomatik Python 3.12 Kurulum ve TEK EXE Derleyici
 # Not: Windows PowerShell 5.1 uyumlulugu icin yalnizca saf ASCII karakterler kullanilmistir.
 # =============================================================================
 \$ErrorActionPreference = "Stop"
 Set-Location -Path \$PSScriptRoot
 
 Write-Host "=================================================================" -ForegroundColor Cyan
-Write-Host " GameOCR Windows 10/11 (Beta) - Otomatik Kurulum ve Tek .EXE Derleyici" -ForegroundColor Cyan
+Write-Host " GameOCR Windows 10/11 - Otomatik Kurulum ve Tek .EXE Derleyici" -ForegroundColor Cyan
 Write-Host "=================================================================" -ForegroundColor Cyan
 
 function Find-Python312 {
     try {
         \$ver = & py -3.12 --version 2>&1
         if (\$LASTEXITCODE -eq 0 -and \$ver -match "3\.12\.") {
-            return "py -3.12"
+            return @{ Exe = "py"; Args = @("-3.12") }
         }
     } catch {}
     try {
         \$ver = & python --version 2>&1
         if (\$LASTEXITCODE -eq 0 -and \$ver -match "3\.12\.") {
-            return "python"
+            return @{ Exe = "python"; Args = @() }
         }
     } catch {}
     \$localPy = Join-Path \$env:LOCALAPPDATA "Programs\Python\Python312\python.exe"
     if (Test-Path \$localPy) {
-        return "\`"\$localPy\`""
+        return @{ Exe = \$localPy; Args = @() }
     }
     return \$null
 }
 
-\$pyCmd = Find-Python312
-if (-not \$pyCmd) {
+\$pyInfo = Find-Python312
+if (-not \$pyInfo) {
     Write-Host "[1/4] Python 3.12 bulunamadi. Python 3.12 otomatik olarak kuruluyor..." -ForegroundColor Yellow
     \$installed = \$false
     if (Get-Command winget -ErrorAction SilentlyContinue) {
@@ -465,17 +465,18 @@ if (-not \$pyCmd) {
         Write-Host " -> Python 3.12.8 sessiz kurulumu baslatiliyor..." -ForegroundColor Cyan
         Start-Process -FilePath \$installerPath -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_test=0 Include_launcher=1" -Wait
     }
-    \$pyCmd = Find-Python312
-    if (-not \$pyCmd) {
+    \$pyInfo = Find-Python312
+    if (-not \$pyInfo) {
         Write-Error "Python 3.12 otomatik kurulumu tamamlanamadi. Lutfen https://www.python.org/downloads/ adresinden Python 3.12 kurun."
         exit 1
     }
 }
 
-Write-Host "[2/4] Python 3.12 hazir: \$pyCmd" -ForegroundColor Green
+Write-Host "[2/4] Python 3.12 hazir: \$(\$pyInfo.Exe)" -ForegroundColor Green
 if (-not (Test-Path ".venv\Scripts\python.exe")) {
     Write-Host " -> .venv sanal ortami olusturuluyor (Python 3.12)..." -ForegroundColor Cyan
-    Invoke-Expression "\$pyCmd -m venv .venv"
+    \$venvArgs = @(\$pyInfo.Args) + @("-m", "venv", ".venv")
+    & \$pyInfo.Exe @venvArgs
 }
 
 \$venvPy = Join-Path \$PSScriptRoot ".venv\Scripts\python.exe"
@@ -487,7 +488,14 @@ if ("${GPU_CHOICE}" -eq "nvidia" -or "${GPU_CHOICE}" -eq "dual") {
 } else {
     & \$venvPy -m pip install "rapidocr-onnxruntime>=1.3" onnxruntime
 }
-& \$venvPy -m pip install pyinstaller ctranslate2 sentencepiece dxcam mss opencv-python-headless numpy rapidfuzz PyQt6 deepl tomli-w python-dotenv
+& \$venvPy -m pip install pyinstaller ctranslate2 sentencepiece mss opencv-python-headless numpy rapidfuzz PyQt6 deepl tomli-w python-dotenv
+\$prevEap = \$ErrorActionPreference
+\$ErrorActionPreference = "Continue"
+& \$venvPy -m pip install dxcam *> \$null
+if (\$LASTEXITCODE -ne 0) {
+    Write-Host "[BILGI] Opsiyonel dxcam paketi kurulamadi; MSS yakalama motoru kullanilacak." -ForegroundColor Yellow
+}
+\$ErrorActionPreference = \$prevEap
 
 Write-Host "[4/4] Tek dosyalik ${WIN_EXE_NAME}.exe derleniyor..." -ForegroundColor Cyan
 \$env:PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK = "True"
@@ -513,6 +521,12 @@ Write-Host "[4/4] Tek dosyalik ${WIN_EXE_NAME}.exe derleniyor..." -ForegroundCol
 if (Test-Path "models") {
     \$pyiArgs += @("--add-data", "models;models")
 }
+if (Test-Path "gameocr\assets\icons") {
+    \$pyiArgs += @("--add-data", "gameocr/assets/icons;gameocr/assets/icons")
+}
+if (Test-Path "gameocr\assets\icons\gameocr.ico") {
+    \$pyiArgs += @("--icon", "gameocr/assets/icons/gameocr.ico")
+}
 if ("${GPU_CHOICE}" -eq "nvidia" -or "${GPU_CHOICE}" -eq "dual") {
     \$pyiArgs += @("--collect-all", "paddleocr", "--collect-all", "paddlex")
 } else {
@@ -534,17 +548,17 @@ Write-Host ""
 Write-Host "[BASARILI] Tek dosyalik GameOCR Windows .EXE hazir: ${WIN_EXE_NAME}.exe" -ForegroundColor Green
 EOF
 
-    WIN_BAT="$DIST_DIR/build-windows-beta.bat"
+    WIN_BAT="$DIST_DIR/build-windows.bat"
     cat > "$WIN_BAT" <<EOF
 @echo off
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 REM ============================================================================
-REM GameOCR Windows 10/11 (Beta) Tek Dosya .EXE Derleme Betigi (${COMPILER_CHOICE} - ${GPU_CHOICE})
+REM GameOCR Windows 10/11 Tek Dosya .EXE Derleme Betigi (${COMPILER_CHOICE} - ${GPU_CHOICE})
 REM Python 3.12 kurulu degilse otomatik olarak indirir ve kurar.
 REM ============================================================================
 echo ============================================================================
-echo  GameOCR Windows 10/11 (Beta) - Otomatik Python 3.12 ve Tek .EXE Derleme
+echo  GameOCR Windows 10/11 - Otomatik Python 3.12 ve Tek .EXE Derleme
 echo ============================================================================
 
 set PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
@@ -566,8 +580,8 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 REM 2. PowerShell derleme betigini calistir (veya dogrudan PyInstaller calistir)
-if exist "%~dp0setup-windows-beta.ps1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-windows-beta.ps1"
+if exist "%~dp0setup-windows.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-windows.ps1"
     if !ERRORLEVEL! EQU 0 goto :done
 )
 
@@ -578,16 +592,27 @@ if not exist ".venv\Scripts\python.exe" (
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip wheel setuptools
 python -m ${WIN_OCR_INSTALL}
-python -m pip install pyinstaller ctranslate2 sentencepiece dxcam mss opencv-python-headless numpy rapidfuzz PyQt6 deepl tomli-w python-dotenv
+python -m pip install pyinstaller ctranslate2 sentencepiece mss opencv-python-headless numpy rapidfuzz PyQt6 deepl tomli-w python-dotenv
+python -m pip install dxcam >nul 2>&1 || echo [BILGI] Opsiyonel dxcam paketi kurulamadi; MSS yakalama kullanilacak.
 
 set MODEL_DATA_ARG=
 if exist "models" (
     set MODEL_DATA_ARG=--add-data "models;models"
 )
+set ICON_DATA_ARG=
+if exist "gameocr\assets\icons" (
+    set ICON_DATA_ARG=--add-data "gameocr/assets/icons;gameocr/assets/icons"
+)
+set ICON_EXE_ARG=
+if exist "gameocr\assets\icons\gameocr.ico" (
+    set ICON_EXE_ARG=--icon "gameocr/assets/icons/gameocr.ico"
+)
 
 python -m PyInstaller --noconfirm --clean ${WIN_PYI_MODE} --windowed --name ${WIN_EXE_NAME} ^
     --add-data "config.default.toml;." ^
     %MODEL_DATA_ARG% ^
+    %ICON_DATA_ARG% ^
+    %ICON_EXE_ARG% ^
     --collect-submodules gameocr ^
     ${WIN_PYI_OCR_FLAGS} ^
     --collect-all ctranslate2 ^
@@ -603,11 +628,11 @@ if exist "dist\\${WIN_EXE_NAME}.exe" (
 
 :done
 echo.
-echo [GameOCR Windows Beta] Tek dosyalik EXE derlemesi tamamlandi: ${WIN_EXE_NAME}.exe
+echo [GameOCR Windows] Tek dosyalik EXE derlemesi tamamlandi: ${WIN_EXE_NAME}.exe
 pause
 EOF
 
-    WIN_RUN_BAT="$DIST_DIR/run-windows-beta.bat"
+    WIN_RUN_BAT="$DIST_DIR/run-windows.bat"
     cat > "$WIN_RUN_BAT" <<EOF
 @echo off
 cd /d "%~dp0"
@@ -630,33 +655,33 @@ if exist "dist\\${WIN_EXE_NAME}\\${WIN_EXE_NAME}.exe" (
     exit /b 0
 )
 if not exist ".venv\Scripts\python.exe" (
-    call "%~dp0build-windows-beta.bat"
+    call "%~dp0build-windows.bat"
 )
 ".venv\Scripts\python.exe" -m gameocr
 EOF
 
-    echo -e "\n${CYAN}• Windows (Beta) otomatik Python 3.12 kuruculu derleme betikleri oluşturuldu:${NC}"
+    echo -e "\n${CYAN}• Windows 10/11 otomatik Python 3.12 kuruculu derleme betikleri oluşturuldu:${NC}"
     echo -e "  - $WIN_BAT"
     echo -e "  - $WIN_PS1"
     echo -e "  - $WIN_RUN_BAT"
 
     echo -e "\n${BLUE}[PyInstaller Komutu]:${NC}"
-    echo "  py -3.12 -m PyInstaller --noconfirm --clean --windowed --name GameOCR --add-data config.default.toml;. --collect-submodules gameocr --collect-all ctranslate2 --hidden-import gameocr.capture.win32_backend --hidden-import mss gameocr/__main__.py"
+    echo "  py -3.12 -m PyInstaller --noconfirm --clean --windowed --name GameOCR --icon gameocr/assets/icons/gameocr.ico --add-data config.default.toml;. --add-data gameocr/assets/icons;gameocr/assets/icons --collect-submodules gameocr --collect-all ctranslate2 --hidden-import gameocr.capture.win32_backend --hidden-import mss gameocr/__main__.py"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
-        echo -e "\n${GREEN}[DRY-RUN] Windows (Beta) derleme komutu ve otomatik Python 3.12 kurulum paketi doğrulandı (çalıştırılmadı).${NC}"
+        echo -e "\n${GREEN}[DRY-RUN] Windows 10/11 derleme komutu ve otomatik Python 3.12 kurulum paketi doğrulandı (çalıştırılmadı).${NC}"
         exit 0
     fi
 
-    WIN_ZIP="$PROJECT_DIR/GameOCR-Windows-Beta-${GPU_CHOICE}.zip"
+    WIN_ZIP="$PROJECT_DIR/GameOCR-Windows-${GPU_CHOICE}.zip"
     "$PYTHON_BIN" -c "
 import shutil
-shutil.make_archive('$PROJECT_DIR/GameOCR-Windows-Beta-${GPU_CHOICE}', 'zip', '$DIST_DIR')
+shutil.make_archive('$PROJECT_DIR/GameOCR-Windows-${GPU_CHOICE}', 'zip', '$DIST_DIR')
 "
-    echo -e "\n${GREEN}${BOLD}✓ Windows 10/11 (Beta) Taşınabilir Kurulum & Derleme Paketi Hazır:${NC}"
+    echo -e "\n${GREEN}${BOLD}✓ Windows 10/11 Taşınabilir Kurulum & Derleme Paketi Hazır:${NC}"
     echo -e "  • Klasör : ${YELLOW}$DIST_DIR${NC}"
     echo -e "  • Arşiv  : ${YELLOW}$WIN_ZIP${NC}"
-    echo -e "  • Bilgi  : Windows üzerinde ${BOLD}build-windows-beta.bat${NC} dosyasına çift tıkladığınızda Python 3.12 kurulu değilse otomatik indirip kurar ve ${BOLD}GameOCR.exe${NC} üretir."
+    echo -e "  • Bilgi  : Windows üzerinde ${BOLD}build-windows.bat${NC} dosyasına çift tıkladığınızda Python 3.12 kurulu değilse otomatik indirip kurar ve ${BOLD}GameOCR.exe${NC} üretir."
     exit 0
 fi
 
@@ -985,16 +1010,19 @@ X-KDE-StartupNotify=false
 StartupWMClass=gameocr
 DESKTOP_EOF
 
-        cat > "$appdir/gameocr.svg" <<'SVG_EOF'
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="48" fill="#12131A"/>
-  <rect x="28" y="48" width="200" height="120" rx="18" fill="none" stroke="#6366F1" stroke-width="12"/>
-  <rect x="48" y="132" width="160" height="20" rx="8" fill="#10B981"/>
-  <text x="128" y="112" font-family="sans-serif" font-size="44" font-weight="bold" fill="#F5F5F7" text-anchor="middle">OCR</text>
-  <path d="M88 204 H168" stroke="#6366F1" stroke-width="12" stroke-linecap="round"/>
-</svg>
-SVG_EOF
-        ln -sf gameocr.svg "$appdir/.DirIcon"
+        mkdir -p "$appdir/usr/share/applications"
+        cp -f "$appdir/gameocr.desktop" "$appdir/usr/share/applications/gameocr.desktop"
+
+        if [[ -f "$PROJECT_DIR/gameocr/assets/icons/logo_256.png" ]]; then
+            cp -f "$PROJECT_DIR/gameocr/assets/icons/logo_256.png" "$appdir/gameocr.png"
+            cp -f "$PROJECT_DIR/gameocr/assets/icons/logo_256.png" "$appdir/.DirIcon"
+        fi
+        for isz in 24 32 64 128 256 512; do
+            if [[ -f "$PROJECT_DIR/gameocr/assets/icons/logo_${isz}.png" ]]; then
+                mkdir -p "$appdir/usr/share/icons/hicolor/${isz}x${isz}/apps"
+                cp -f "$PROJECT_DIR/gameocr/assets/icons/logo_${isz}.png" "$appdir/usr/share/icons/hicolor/${isz}x${isz}/apps/gameocr.png"
+            fi
+        done
 
         local squashfs_img="$BUILD_DIR/gameocr_${edition_gpu}.squashfs"
         rm -f "$squashfs_img"
@@ -1028,6 +1056,7 @@ if [[ "$COMPILER_CHOICE" == "pyinstaller" ]]; then
         "--distpath" "$DIST_DIR"
         "--workpath" "$BUILD_DIR"
         "--add-data" "$PROJECT_DIR/config.default.toml:."
+        "--add-data" "$PROJECT_DIR/gameocr/assets/icons:gameocr/assets/icons"
         "--collect-submodules" "gameocr"
     )
     for hi in "${HIDDEN_IMPORTS[@]}"; do
@@ -1112,6 +1141,7 @@ elif [[ "$COMPILER_CHOICE" == "nuitka" ]]; then
         "--enable-plugin=numpy"
         "--include-package=gameocr"
         "--include-data-files=$PROJECT_DIR/config.default.toml=config.default.toml"
+        "--include-data-dir=$PROJECT_DIR/gameocr/assets/icons=gameocr/assets/icons"
         "--output-dir=$DIST_DIR"
         "--output-filename=gameocr"
     )

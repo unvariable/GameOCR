@@ -34,7 +34,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .security import safe_extract_zip, validate_https_url
+from .security import atomic_replace, safe_extract_zip, validate_https_url
 from typing import Any, Callable
 
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -430,9 +430,14 @@ class LocalModelManager:
             "installed_packs": sorted(self._installed),
             "updated_at": time.time(),
         }
-        tmp = self.manifest_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        tmp.replace(self.manifest_path)
+        tmp = self.manifest_path.with_name(
+            f"{self.manifest_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        try:
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            atomic_replace(tmp, self.manifest_path)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def installed_packs(self) -> list[str]:
         with self._lock:
@@ -579,6 +584,7 @@ class LocalModelManager:
                 log.info("CTranslate2 model paketi açıldı: %s", sub_code)
             except Exception as exc:
                 log.warning("Çevrimiçi model ağırlığı indirilemedi (%s): %s", sub_code, exc)
+                raise LocalModelError(f"Model indirilemedi ({sub_code}): {exc}") from exc
 
     def remove_pack(self, pack_code: str) -> bool:
         """Kurulu bir dil paketini diskten ve manifestodan kaldırır."""
@@ -590,6 +596,8 @@ class LocalModelManager:
             if self._loaded_pair == code:
                 self._loaded_pair = None
                 self._loaded_backend = None
+                # Windows'ta açık CTranslate2/SentencePiece dosya tutamaçlarını silmeden önce serbest bırak
+                gc.collect()
             pack_dir = self.models_dir / code.lower()
             if pack_dir.exists():
                 shutil.rmtree(pack_dir, ignore_errors=True)

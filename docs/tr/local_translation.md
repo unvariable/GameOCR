@@ -21,7 +21,8 @@ Ayarlar → Çevirmen sekmesinden veya `config.toml` içinden 3 mod seçilebilir
 Oyun oynarken sistem kaynakları (özellikle GPU VRAM ve RAM) oyun için kritiktir. `LocalModelManager` bu nedenle **Lazy Loading (Tembel Yükleme)** ve **Tekil Aktif Model** stratejisi uygular:
 - Uygulama `deepl` modundayken hiçbir lokal çeviri modeli belleğe yüklenmez (`0 MB` ek RAM/VRAM kullanımı).
 - `local` modda çeviri istendiğinde yalnızca aktif dil çiftinin (`_loaded_pair`) `int8` nicemlenmiş (quantized) ağırlıkları belleğe yüklenir.
-- Kullanıcı kaynak/hedef dili değiştirdiğinde veya `deepl` moduna döndüğünde `unload_model()` çağrılarak önceki model derhal bellekten boşaltılır.
+- Kullanıcı kaynak/hedef dili değiştirdiğinde veya `deepl` moduna döndüğünde `unload_model()` çağrılarak önceki model derhal bellekten boşaltılır (`gc.collect()` dahil, böylece Windows'ta paket kaldırma sırasında `CTranslate2` dosya kilidi de serbest kalır).
+- İndirme hataları sessizce yutulmaz; `LocalModelError` / `atomic_replace()` ile güvenli şekilde Ayarlar arayüzüne raporlanır ve bozuk/eksik geçici `.tmp` dosyaları temizlenir.
 
 ## 3.4. Çok Dilli OCR Paketi İndirme Yöneticisi (`gameocr/ocr_models.py`)
 

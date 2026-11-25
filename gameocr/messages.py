@@ -90,6 +90,7 @@ class ControlKind(enum.Enum):
     RESUME = "resume"
     SHOWN_TEXT = "shown_text"    # payload: str, ekrandaki çeviri (yankı koruması)
     RESELECT_WINDOW = "reselect_window"  # payload: int | None (yeni pencere ID veya Portal sıfırlama)
+    RESET_STATE = "reset_state"  # OCR ChangeGate ve TextFilter durumunu sıfırla
 
 
 @dataclass(slots=True)
